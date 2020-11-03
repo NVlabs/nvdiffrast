@@ -1,0 +1,225 @@
+
+Environment map stored as part of samples/data/envphong.npz is derived from a Wave Engine sample material originally shared under MIT License that is reproduced below.
+Original material: https://github.com/WaveEngine/Samples/tree/master/Materials/EnvironmentMap/Content/Assets/CubeMap.cubemap
+Original license:  https://github.com/WaveEngine/Samples/blob/master/LICENSE.md
+
+Mesh and texture stored as part of samples/data/earth.npz are derived from "3D Earth Photorealistic 2K" model originally made available under TurboSquid 3D Model License that is reproduced below.
+Original material: https://www.turbosquid.com/3d-models/3d-realistic-earth-photorealistic-2k-1279125
+Original license:  https://blog.turbosquid.com/turbosquid-3d-model-license/#3d-model-license
+
+
+
+MIT License
+
+Copyright (c) 2016 Wave Coorporation
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+
+
+TurboSquid 3D Model License
+
+This is a legally binding agreement between licensee ("you"), and TurboSquid regarding your rights to use 3D Models from the Site under this license. "You" refers to the purchasing entity, whether that is a natural person who must be at least 18 years of age, or a corporate entity. The rights granted in this agreement are granted to the purchasing entity, its parent company, and its majority owned affiliates on a "royalty free" basis, which means that after a Purchase, there are no future royalties or payments that are required. This agreement incorporates by reference the Terms of Use as well as the Site's policies and procedures as such.
+I. Introduction & Definitions
+
+Definitions
+
+This agreement is intended to be easy to understand, and to provide clarity for using 3D Models in the work you create ("Creations"). Over the years, TurboSquid has been asked many questions about how 3D Models may be used in Creations, and we have attempted to answer those questions in this agreement.
+
+Some words in this agreement are given specific meanings. Words that appear initially in quotations, such as "you" and "Creations", are defined in the text preceding the word. Other capitalized words are defined below:
+
+"3D Model" is the collection of one or more digital files, packaged in the form of a product on the Site that can be identified by a 3D Model ID, and that is made available to you for Purchase on the Site. A 3D Model may include 3D Model files, geometry, texture maps, materials, motion captures, renderings and other constituent files related to the 3D Model data and its representation.
+
+"Site" refers to the TurboSquid websites, API's, software applications or any approved means or utility either currently in existence or in the future; the software and source code used by TurboSquid to provide such services; user interface layouts, designs, images, text, knowledgebase articles, program offers; site information provided in reports (such as popular keyword searches); and all other intellectual property protected under copyright, trademark, patent, publicity, or any other proprietary right.
+
+"Purchase" is the acquisition of a 3D Model by you from the Site under this agreement, whether as a purchase of 3D Model made available at a price of greater than $0, or a download of 3D Model made available at no charge.
+
+"TurboSquid" includes TurboSquid, Inc. and all licensed affiliates and partners that distribute 3D Models on behalf of TurboSquid, Inc.
+
+"Product Page" is the product page or interface that displays 3D Models available for Purchase on the Site.
+
+"Computer Game" is a type of Creation that includes digital games, computer-based games, handheld electronic games, mobile games, online games, web-games, social games, game mods, and console-based games.
+
+"Imagery" is a Creation made of any single image or sequence of images.
+
+"Depicted Intellectual Property" means any intellectual property depicted in the 3D Model, including any copyright, trademark, trade dress, right of publicity, or any other proprietary right throughout the world that may apply. For purposes of clarity, this does not refer to the copyrights owned by the creator of the 3D Model that are licensed in this agreement.
+
+To make reading this agreement easier and less repetitive, the following constructions are used:
+
+"Include," including," and "such as" are considered to be followed with "but not limited to." Examples are used in this agreement to illustrate, rather than limit, the scope of the terms.
+
+"The following restrictions", "the foregoing restrictions", and "subject to the restrictions" are considered to be followed with "in addition to all other restrictions applicable within this agreement."
+II. License Rights
+
+1. Ownership. TurboSquid does not grant title or ownership in 3D Models. All rights in 3D Models not expressly granted in this agreement are reserved by TurboSquid for itself and its licensors.
+
+2. Rights Granted. For 3D Models, TurboSquid grants to you a non-exclusive, perpetual, worldwide right and license to copy, distribute, reproduce, adapt, publicly display, publicly perform, digitally perform, transmit, broadcast, telecast, advertise, create derivative works, and market 3D Models within Creations in the uses authorized in this agreement. You may request authorization for a use not covered by this agreement ("New Use") by writing use@turbosquid.com. TurboSquid is authorized to approve a New Use if TurboSquid finds in its sole judgment that the New Use is substantially similar to another established use in this agreement and authorizes the New Use in writing.
+
+3. Rights Granted When Sharing 3D Models. If you Purchase as an employee of a corporate entity, sharing Purchased 3D Models with other employees of your corporate entity is allowed. Examples of allowed sharing include storing files on a networked hard drive, and aggregating 3D Models for later use in future Creations. You are responsible for any downstream distribution, use, or misuse by a recipient of a shared 3D Models. In all cases, sharing 3D Models with external people or entities is only allowed in the following situations, and with the following restrictions:
+
+a. In the production of a Creation owned by you, if you are working in collaboration with external parties, and there is a need to share 3D Models for the development and production of your Creation, sharing 3D Models with those external parties is allowed. Any external party that receives 3D Models may only use 3D Models on your Creations and must take reasonable care to secure and limit access to 3D Models to that purpose.
+
+b. In the production of a Creation owned by another entity ("your Client"), if you are working as a contractor and need to share 3D Models with your Client, or any external parties working with your Client, sharing 3D Models is allowed, subject to the restriction that all parties may use 3D Models only for your Client's particular Creation, and for successive versions of your Client's Creation, such as sequel Computer Games or movies that utilize the same 3D Models. All parties must take reasonable care to secure and limit access to 3D Models to the parties working on your Client's Creation. For all other use by any party, 3D Models must be Purchased again to create a new license agreement governing that use
+
+4. Editorial Use Restriction for Some 3D Models. The following restrictions apply to any 3D Model with an "Editorial Uses Only" label on its Product Page. Permitted use of Depicted Intellectual Property in such 3D Models is limited to news reporting in Creations of some cultural, editorial, journalistic, or otherwise newsworthy value, including news reporting on television and the internet. A second permitted use is use within an academic setting, limited to teaching, scholarship, and research. This restriction does not apply if you have the needed authorization to use the Depicted Intellectual Property for your Creation, such as if you are owner of the Depicted Intellectual Property, or the advertising team, hired party, or licensee of the Depicted Intellectual Property owner.
+
+5. Depicted Intellectual Property. TurboSquid does not own or license any Depicted Intellectual Property. TurboSquid does not in any way make any representations or warranties about Depicted Intellectual Property associated with 3D Models. You are solely responsible for determining the need for and, if appropriate, obtaining any needed clearance, consent, or release to use any Depicted Intellectual Property in your Creations.
+
+6. Creations of Imagery.
+
+Permitted Uses of Creations of Imagery. Subject to the following restrictions, you may use Creations of Imagery within news, film, movies, television programs, video projects, multi-media projects, theatrical display, software user interfaces; architectural renderings, Computer Games, virtual worlds, simulation and training environments; corporate communications, marketing collateral, tradeshow promotional items, booth decorations and presentations; pre-visualizations, product prototyping and research; mobile, web, print, television, and billboard advertising; online and electronic publications of blogs, literature, social media, and email campaigns; website designs and layouts, desktop and mobile wallpapers, screensavers, toolbar skins; books, magazines, posters, greeting cards; apparel items, brochures, framed or printed artwork, household items, office items, lenticular prints, product packaging and manufactured products.
+
+Restrictions on Permitted Uses of Creations of Imagery.
+
+a. Stock Media Clearinghouse. You may NOT publish or distribute Creations of Imagery through another stock media clearinghouse, for example as part of an online marketplace for photography, clip art, or design templates.
+
+b. Promotional Images. Images displayed for the promotion a 3D Model on its Product Page ("Promotional Images") may be used in Creations of Imagery, provided that the 3D Model itself has been Purchased and subject to the following restrictions:
+
+i. You may NOT use a Promotional Image that has any added element which is not included as part of the 3D Model. An example of this type of restricted use is if the 3D Model contains an airplane, and there is a Promotional Image of that airplane rendered over a blue sky; however, the blue sky image is not included as part of the 3D Model. Other prohibited examples include use of Promotional Images from movies or advertisements that may have used 3D Model.
+
+ii. You may NOT use any Promotional Image that has a logo, mark, watermark, attribution, copyright or other notice superimposed on the image without prior approval from TurboSquid Support.
+
+c. Business Logos. You may NOT use Imagery in any Creation that is a trademark, servicemark, or business logo. This restriction is included because the owners of these types of Creations typically seek exclusivity on the use of the imagery in their Creation, which is incompatible with the non-exclusive license granted to you under this agreement.
+
+
+7. Creations of Computer Games and Software
+
+Permitted Uses in Creations of Computer Games and Software. Subject to the following restrictions, you may incorporate 3D Models in Creations of Computer Games, virtual worlds, simulation and training environments; mobile, desktop and web applications; and interactive electronic publications of literature such as e-books and electronic textbooks.
+
+Restrictions on Permitted Uses of 3D Models in Creations of Games and Software.
+
+a. Interactivity. Your inclusion of 3D Models within any such Creation is limited to uses where 3D Model is contained in an interactive experience for the user and not made available outside of the interactive experience. Such a permitted example of this use would be to include a 3D Model of human anatomy in a medical training application in a way that the 3D Model or its environment may be manipulated or interacted with.
+
+b. Access to 3D Models. You must take all reasonable and industry standard measures to incorporate 3D Models within Creations to prevent other parties from gaining access to 3D Models. 3D Models must be contained in proprietary formats so that they cannot be opened or imported in a publicly available software application or framework, or extracted without reverse engineering. WebGL exports from Unity, Unreal, and Lumberyard are permitted. Any other open format or format encrypted with decryptable open standards (such as an encrypted compression archive or other WebGL programs not listed here) are prohibited from using 3D Models. If your Creation uses WebGL and you are not sure if it qualifies, please contact use@turbosquid.com and describe your Creation in detail.
+
+c. Open Systems. You typically may NOT include 3D Models in Creations that have the general functionality for importing and/or exporting 3D Models. Please contact use@turbosquid.com and describe your Creation in detail if this is your desired use. An example of such a prohibited use is to include 3D Models as a starter library within a standard retail Software Creation that allows users to generally work with 3D Models, even if the 3D Model itself is somehow protected and is not capable of being exported. An allowed use is for custom or enterprise software in certain circumstances.
+
+d. Virtual Good Sales. You may NOT import, upload, reproduce, make available, publish, transmit, distribute, or sublicense 3D Models in Creations of virtual goods or worlds for any 3D community ("Virtual World"), unless you or your Client owns the Virtual World platform and it complies with the previous restrictions.
+
+
+8. Creations of Physical Form.
+
+Permitted Uses in Creations of Physical Form. Subject to the following restrictions, you may use 3D Models to make Physical Creations such as 3D printed works, articles of manufacture, custom vehicles, furniture, jewelry, sculptural artwork, toys, and physical entertainment goods ("Creations of Physical Form").
+
+Restrictions on Permitted Uses in Creations of Physical Form.
+
+a. Substantially Similar Creations. Permitted use of any Creation of Physical Form in which a 3D Model is untransformed or substantially similar to the 3D Model is limited to personal use, gifts, or charitable donations, with a maximum of 5 instances of such Creation per Purchase; unless the 3D Model is a small part of a much larger array of other physical objects in the Creation. For example, if you are creating a real-world, physical human skeleton for manufacture for sale, it is permitted to add a 3D printed human head that exactly resembles the Purchased 3D Model, but it is not permitted to sell the 3D printed head by itself. Another permitted example of a 3D Model being a small part of a larger array is using a 3D Model that ends up within an automobile as a part of the automobile.
+
+b. No Depicted Intellectual Property. You may NOT reproduce Depicted Intellectual Property in any Creation of Physical Form for any purpose. For example, you may NOT make Physical Form Creations of a copyrighted character (Spiderman, Elsa, Slimer), or branded technology (Apple, Toshiba, Samsung).
+
+9. 3D Industry Promotional Use. If TurboSquid has granted you, as a hardware or software partner, access to priced 3D Models on a free-of-charge basis, your use of 3D Models is restricted to internal testing for your 3D software or hardware products, and to the promotion of your software or hardware products with Creations of Imagery provided that an attribution of the artist's name and the Site are included. You agree that should any 3D Models be used outside of these purposes in ways that are normally allowed after a Purchase, that you will notify TurboSquid and promptly Purchase the 3D Models and otherwise comply with the terms herein.
+
+10. Unauthorized Use. If you use 3D Models in an unauthorized way, TurboSquid may terminate your account and pursue other penalties, damages, losses, and profits TurboSquid is entitled to under this agreement or at law or equity. The following are unauthorized uses that are explicitly prohibited:
+
+a. Competition. You may NOT use 3D Models in a way that competes with the Site, including distributing through 3D Model Clearinghouses. You may NOT publish, distribute, or make 3D Models available through any online clearinghouse infrastructure. You may not redistribute 3D Models as part of any design template, After Effects template, stock photography, video or clip art for distribution or licensing through any online stock media clearinghouse whatever.
+
+b. Re-Distribution. You may NOT re-distribute, publish, or make 3D Models available to any third party except in the form of a permitted Creation, or shared as authorized in this agreement.
+
+c. Group Buying. You may NOT aggregate funds to Purchase 3D Models with one or more other parties. An example of this prohibited use is a website membership where members pool their money to make a single Purchase that is shared by the members of the group. Each such member must Purchase individually.
+
+d. No Obscene or Unlawful Use. You may NOT use 3D Models for any defamatory, harassing, pornographic, obscene, or racist purpose, or to infringe any party's Depicted Intellectual Property rights.
+
+e. False Attribution. You may NOT misrepresent yourself as the creator of 3D Models.
+
+11. Resellers. The license granted herein is wholly transferable by an authorized reseller ("Reseller") to another party ("Transferee"). Each transferred license must be transferred entirely and all transferred 3D Models must be permanently deleted from the Reseller's systems after the transfer. When transferring the license, Reseller represents and warrants that the Reseller has the authority to bind the Transferee to these terms. The Reseller is jointly and severally responsible with any Transferee and each are liable for the transferee's use and compliance with TurboSquid's Terms of Use and Site's policies and procedures as well as any financial obligations hereunder.
+III. License Term & Termination
+
+1. Term. Your right and license to 3D Models is perpetual, unless terminated as described herein.
+
+2. Termination. Your license grant is terminated immediately and without notice in the cases below. In such termination, you and any recipients of 3D Models must cease use, distribution, and destroy all copies of 3D Models.
+
+a. Reversal of Purchase. Your right and license to 3D Models are contingent on your Purchase of 3D Models. Any payment reversal of a Purchase for any reason immediately terminates all rights granted under this agreement. Potential Reasons for a payment reversal include:
+
+i. TurboSquid reverses your Purchase at your request.
+
+ii. TurboSquid receives a charge back or other notice from your bank or credit card cancelling your Purchase and/or withdrawing the funds used for your Purchase.
+
+iii. TurboSquid determines in its sole discretion that your Purchase was fraudulent.
+
+iv. When you are granted delayed payment terms, and fail to make payments such that TurboSquid sends you notice and terminates your account.
+
+b. Failure to Abide by the License Grant. Material failure to abide by the terms of this agreement immediately terminates your right and license to 3D Models. If you detect a violation of the license grant by you or any recipient of shared 3D Models, and promptly report the violation to agent@turbosquid.com, TurboSquid will make a good faith effort to find an appropriate remedy to preserve your license grant.
+IV. Warranties
+
+You covenant, represent, and warrant to TurboSquid that:
+
+    You have full right, power, legal capacity, and authority to enter into and perform this agreement, have obtained any third-party consent needed to do so, and, prior to any Purchase, had an opportunity to seek independent legal counsel.
+    You will not use 3D Models except pursuant to the terms of this agreement. Should you use 3D Models in an unauthorized way, you agree to any reasonable fee or penalty exercised by TurboSquid under this agreement or applicable law.
+    You will, prior to Purchase, determine the need for and, if appropriate, obtain any needed third-party clearance, consent, or release to use Depicted Intellectual Property shown in the digital rendering of 3D Models, and shall not use 3D Models to infringe any party's Depicted Intellectual Property rights.
+    You will immediately notify TurboSquid of any legal claim or challenge against your use of 3D Models or any other rights issue, before disclosing such issue to any third-party.
+
+V. Limitation of Liability
+
+1. 3D Models are provided on an "as is", "as available", and "with all faults" basis. TurboSquid makes no representations, warranties, conditions, or guarantees as to the usefulness, quality, suitability, truth, fitness for a particular purpose, non-infringement, merchantability, or cosmetic attributes of 3D Models, and does not guarantee the accuracy or completeness of specifications associated with 3D Models, including measurements, weight, durability, strength, materials, general physical properties, regulatory compliance, other engineering or construction attributes.
+
+2. TurboSquid disclaims all express or implied conditions, representations, and warranties of any kind regarding 3D Models, including any implied warranty or condition of merchantability. TurboSquid allows your Purchase to be refunded under certain reasonable time frames and conditions, subject to the Site's policies.
+
+3. You assume all risk for any damage to your computer systems and network for any damage to your computer system by obtaining 3D Models, including any damages resulting from computer viruses.
+
+4. To the fullest extent permitted by law, TurboSquid shall not be liable for (A) any direct, indirect, punitive, special, incidental, consequential, or exemplary damages (including loss of business, revenue, profits, goodwill, use, data, electronically transmitted orders, or other economic advantage) arising out of or in connection with 3D Models, even if TurboSquid has previously been advised of, or reasonably could have foreseen, the possibility of such damages, however they arise, whether in breach of contract or in tort (including negligence) or (B) any damages in excess of $1,000. To the extent that any jurisdiction does not allow the exclusion or limitation of direct, incidental, or consequential damages, portions of the preceding limitation or exclusion may not apply, but should be construed to the greatest extent applicable in such jurisdictions. Notwithstanding anything to the contrary herein, the TurboSquid indemnification obligation set forth below shall be limited to the following depending on the licensing tier:
+
+Tier 0: 3D Models acquired at free-of-charge are not indemnified.
+
+Tier 1: Standard License indemnity limitation is ten thousand ($10,000) dollars for all 3D Models acquired with payment. This indemnity is in aggregate for all 3D Models acquired under the Standard License.
+
+Tier 2: Small Business License indemnity limitation is two hundred and fifty thousand ($250,000) dollars for any 3D Model. This indemnity is in aggregate for all 3D Models acquired under the Small Business License.
+
+Tier 3: Enterprise License indemnity limitation is one million ($1,000,000) dollars for any 3D Model. This indemnity is in aggregate for all 3D Models acquired under the Enterprise License.
+
+For any 3D Model labeled Editorial, the above indemnities shall only apply if the model is properly used within the editorial license set forth herein (i.e. for news and editorial purposes in association with newsworthy media.)  For use outside the Editorial scope, no indemnification from TurboSquid shall apply. 
+
+5. You agree to indemnify and hold TurboSquid and its subsidiaries, affiliates, shareholders, officers, directors, agents, licensors, licensee, suppliers, alliance members, other partners, employees and representatives ("TurboSquid Parties") harmless from any claim or demand, including reasonable attorneys' fees, made by any third party due to, or arising out of your use of 3D Models or Creations.
+
+6. Subject to sections 4 and 5 above, TurboSquid shall indemnify, defend, and hold you harmless from and against any claim or demand, including reasonable attorneys' fees made by any third party for copyright or trademark infringement due to or arising out of your use of the 3D Models in accordance with these Terms, but excluding any modifications made by You, if such infringement was caused by the modification. This indemnity shall not apply to any 3D Model labeled for Editorial Use or a brand name, logo, or other Depicted Intellectual Property prior identified in a 3D Model.
+
+7. In the event of an indemnification claim by You, you agree to provide notice to TurboSquid within thirty days' of receiving any claim and allowing TurboSquid to fully control such claim, including but not limited to, selection of counsel, reasonable diligence into the claim, and if necessary litigation and/or settlement. Notice must be given via email to: agent@turbosquid.com. Notice is not considered made until it is acknowledged in writing by TurboSquid.
+VI. Other Terms
+
+1. Entire Agreement. This agreement constitutes the entire agreement between you and TurboSquid relating to your Purchase, unless you have a corporate license agreement with TurboSquid. Corporate licenses are available with additional protections for additional fees. Please contact enterprise@turbosquid.com if your organization requires a corporate license. TurboSquid does not otherwise offer any other changes, additions, variations, or additional signed forms related to this agreement. No modification to this agreement will be binding, unless in writing and signed by an authorized TurboSquid representative.
+
+2. Material Breach and Injunction.
+
+Your rights hereunder vary by licensing tier as follows:
+
+For the Standard License, you agree that any material breach of these Terms will result in irreparable harm to TurboSquid for which damages would be an inadequate remedy and, therefore, in addition to its rights and remedies otherwise available at law, TurboSquid will be entitled to equitable relief, including both a preliminary and permanent injunction, if such a breach occurs. You waive any requirement for the posting of a bond or other security if TurboSquid seeks such an injunction.
+
+For the Enterprise License, TurboSquid may not seek injunctive relief hereunder for any 3D Model. It hereby waives all right to equitable and injunctive relief and its damages shall be limited to monetary damages.
+
+Notwithstanding anything to the contrary herein, TurboSquid would be irreparably harmed and shall be entitled to equitable relief including injunctive relief for any hacking, theft, or misuse of the Site.
+
+3. Import/Export Regulations. 3D Models may be subject to the U.S. export laws and the export or import laws of other countries. You agree to comply strictly with all such laws and, in particular, shall with 3D Models: (a) obtain any export, re-export, or import authorizations required by U.S. or Your local laws; (b) not design, develop or produce missile, chemical/biological, or nuclear weaponry; and (c) not provide 3D Models to prohibited countries and entities identified in the U.S. export regulations.
+
+4. Governing Law. This agreement is governed by New York law, excluding conflict of law principles. Any action or proceeding arising out of or related to this agreement must be brought in a state or federal court located in New York, New York, and both parties irrevocably submit to the exclusive jurisdiction of such courts. All notices, requests and other communications under this agreement must be in writing (e-mail messages shall be deemed writings).
+
+5. LIMITED INTERNAL USER ARBITRATION. You acknowledge and agree that TurboSquid may, in its sole discretion, arbitrate disputes between TurboSquid users involving 3D Models (including any purchaser or supplier of 3D Models), and such findings shall be final and non-appealable. Either party may request that TurboSquid arbitrate the dispute, or TurboSquid may elect, at its option, to arbitrate the dispute. After TurboSquid elects to arbitrate any dispute hereunder, TurboSquid will waive any rights to a commission from both the Purchase and arbitration, and the parties must keep the results and process confidential and may not disclose anything related to the dispute to any other party (whether by oral, written, or other type of disclosure). To resolve disputes, TurboSquid may decide to terminate or suspend users, revoke the license, offer replacement 3D Models, reestablish the licensee, or surrender or reallocate fees (whether by refund, charitable donation, or otherwise). TurboSquid may award up to 3X the Purchase price to either party depending on the circumstances. YOU UNDERSTAND, ACKNOWLEDGE, AND AGREE THAT ACCEPTING THIS ARBITRATION PROVISION WAIVES RIGHTS TO JUDICIAL RESOLUTION, TRIAL BY JURY AND RIGHTS YOU WOULD OTHERWISE HAVE IF YOU HAD NOT AGREED TO THIS ARBITRATION PROVISION.
+
+6. Notice. Any notice under this agreement shall be via email to agent@turbosquid.com, provided that you receive an acknowledgement email from a TurboSquid representative within 5 business days. If no such acknowledgement email is received, notice must be in writing and delivered by mail to the following address.
+
+TurboSquid, Inc.
+c/o TurboSquid Support
+935 Gravier St., Suite 1600
+New Orleans, LA 70112
+
+7. Assignment. TurboSquid may not assign its rights under this agreement without providing you notice, except in the case of a bankruptcy, merger, acquisition, sale of all or substantially all of TurboSquid's assets to a subsequent owner or operator, or similar event.
+
+Your assignment rights vary based on the licensing tier of your purchase:
+
+For the Standard License, you may not assign your rights under this agreement without the prior written consent of TurboSquid.
+
+For Small Business or Enterprise Licenses, you may assign your rights under this agreement without the notice and consent of TurboSquid.
+
+8. English. This agreement may be translated into other languages, but English is the official language of this agreement and in any conflict between the English language version and any other version, the English language version shall control.
+
+9. Publicity. The following advertising, marketing, and publicity rights are granted to TurboSquid for each licensing tier:
+
+Standard License purchases may be fully publicized by TurboSquid and you hereby grant TurboSquid the right to use you and your company's name, logo, and project name on the TurboSquid website and in its related marketing and advertising materials.
+
+Small Business and Enterprise License purchase may not be publicized by TurboSquid in any way without prior written permission of the purchaser.
+
+10. Time limitations on any claim hereunder. Any claim by you hereunder, including without limitation a claim for indemnification under section V must be made within two years of purchasing the 3D Model.
+
+This 3D Model License is effective for use with 3D Models for use on or after June 17, 2020.

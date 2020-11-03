@@ -1,0 +1,59 @@
+# Copyright (c) 2020, NVIDIA CORPORATION.  All rights reserved.
+#
+# NVIDIA CORPORATION and its licensors retain all intellectual property
+# and proprietary rights in and to this software, related documentation
+# and any modifications thereto.  Any use, reproduction, disclosure or
+# distribution of this software and related documentation without an express
+# license agreement from NVIDIA CORPORATION is strictly prohibited.
+
+# Note: Should also work with NVIDIA's Docker image builds such as
+#
+# nvcr.io/nvidia/pytorch:20.09-py3
+#
+# This file defaults to pytorch/pytorch as it works on slightly older
+# driver versions.
+ARG BASE_IMAGE=pytorch/pytorch:1.6.0-cuda10.1-cudnn7-devel
+FROM $BASE_IMAGE
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    pkg-config \
+    libglvnd0 \
+    libgl1 \
+    libglx0 \
+    libegl1 \
+    libgles2 \
+    libglvnd-dev \
+    libgl1-mesa-dev \
+    libegl1-mesa-dev \
+    libgles2-mesa-dev \
+    cmake \
+    curl
+
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
+# for GLEW
+ENV LD_LIBRARY_PATH /usr/lib64:$LD_LIBRARY_PATH
+
+# nvidia-container-runtime
+ENV NVIDIA_VISIBLE_DEVICES all
+ENV NVIDIA_DRIVER_CAPABILITIES compute,utility,graphics
+
+# Default pyopengl to EGL for good headless rendering support
+ENV PYOPENGL_PLATFORM egl
+
+COPY docker/10_nvidia.json /usr/share/glvnd/egl_vendor.d/10_nvidia.json
+
+# glew installation from source
+RUN curl -L https://downloads.sourceforge.net/project/glew/glew/2.1.0/glew-2.1.0.tgz > /tmp/glew-2.1.0.tgz
+RUN mkdir -p /tmp && \
+    cd /tmp && tar zxf /tmp/glew-2.1.0.tgz && cd glew-2.1.0 && \
+    SYSTEM=linux-egl make && \
+    SYSTEM=linux-egl make install && \
+    rm -rf /tmp/glew-2.1.0.zip /tmp/glew-2.1.0
+
+RUN pip install imageio imageio-ffmpeg
+
+COPY nvdiffrast /tmp/pip/nvdiffrast/
+COPY README.md setup.py /tmp/pip/
+RUN cd /tmp/pip && pip install .
