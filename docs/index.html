@@ -51,27 +51,21 @@ p {
   margin-top: 0.75em;
   margin-bottom: 0.75em;
 }
+
 .max-width {
     margin: 1em;
 }
-@media screen and (min-width: 0px) {
+
+@media screen and (min-width: 680px) {
     .max-width {
-        margin: 0 15px 0 15px;
+       margin-left: auto;
+       margin-right: auto;
+       margin-top: 60px;
+       margin-bottom: 60px;
+       max-width: 800px;
     }
 }
-@media screen and (min-width: calc(900px + 30px)) {
-    .max-width {
-        margin: 0 auto 0 15px;
-        max-width: 900px;
-    }
-}
-@media screen and (min-width: calc(1100px + 30px)) {
-    .max-width {
-        margin: 0 auto 0 auto;
-        max-width: 900px;
-        transform: translateX(-100px);
-    }
-}
+
 .pixelated {
     image-rendering: pixelated;
 }
@@ -89,7 +83,7 @@ strong {
  	padding-top: 0px;
  	padding-bottom: 1em;
  	margin-bottom: 2em;
-    border-bottom: 1px solid #000;
+    border-bottom: 1px solid #ccc;
  	color: #444;
 }
 
@@ -115,14 +109,7 @@ strong {
     display: flex;
     flex-direction: column;
 }
-.leftcol {
-    order: 1;
-}
-@media screen and (min-width: 680px) {
-    .leftcol {
-        order: inherit;
-    }
-}
+
 .permalinked {
     color: #222;
     text-decoration: none;
@@ -135,19 +122,6 @@ strong {
     vertical-align: top;
 }
 
-#left-toc {
-  position: sticky;
-  top: 0px;
-
-  display: block;
-  overflow: hidden;
-  margin-left: -160px;
-  max-width: 130px;
-  text-align: left;
-  font-size: 14px;
-  line-height: 1.5;
-}
-
 pre {
   font-family: 'Consolas', monospace, sans-serif;
   font-size: 11pt;
@@ -158,12 +132,6 @@ pre {
   line-height: 1.3;
   overflow-x:auto;
   white-space: pre-wrap;
-}
-
-pre.x {
-  background: #fff;
-  padding: 0em;
-  border-radius: 0em;
 }
 
 code {
@@ -193,6 +161,7 @@ img.brd {
 
 img.teaser {
   width: 160px;
+  height: 160px;
   border: 1px solid #aaa;
   box-shadow: 2px 2px 4px 0 #ddd;
   margin: 20px 5px 0 5px;
@@ -246,6 +215,7 @@ div.image-parent {
 .apifunc h4 {
     margin-top: var(--func-vert-padding);
     margin-bottom: var(--func-vert-padding);
+    overflow-x: hidden;
 }
 .apifunc h4 .defarg {
     color:MediumBlue;
@@ -400,7 +370,9 @@ Examples of things we've done with nvdiffrast
 <p>at the root of the repository. You can also just add the repository root directory to your <code>PYTHONPATH</code>.</p>
 <h3 id="windows">Windows</h3>
 <p>On Windows, nvdiffrast requires an external compiler for compiling the CUDA kernels. The development was done using Microsoft Visual Studio 2017 Professional Edition, and this version works with both PyTorch and TensorFlow versions of nvdiffrast. VS 2019 Professional Edition has also been confirmed to work with the PyTorch version of nvdiffrast. Other VS editions besides Professional Edition, including the Community Edition, should work but have not been tested.</p>
-<p>If the compiler binary (<code>cl.exe</code>) cannot be found in <code>PATH</code>, nvdiffrast will search for it heuristically. If this fails you may need to add it manually via <code>&quot;C:\Program Files (x86)\Microsoft Visual Studio\...\...\VC\Auxiliary\Build\vcvars64.bat&quot;</code> where the exact path depends on the version and edition of VS you have installed.</p>
+<p>If the compiler binary (<code>cl.exe</code>) cannot be found in <code>PATH</code>, nvdiffrast will search for it heuristically. If this fails you may need to add it manually via</p>
+<pre><code>&quot;C:\Program Files (x86)\Microsoft Visual Studio\...\...\VC\Auxiliary\Build\vcvars64.bat&quot;</code></pre>
+<p>where the exact path depends on the version and edition of VS you have installed.</p>
 <p>To install nvdiffrast in your local site-packages, run <code>pip install .</code> at the root of the repository. Alternatively, you can add the repository root directory to your <code>PYTHONPATH</code>.</p>
 <h2 id="primitive-operations">Primitive operations</h2>
 <p>Nvdiffrast offers four differentiable rendering primitives: <strong>rasterization</strong>, <strong>interpolation</strong>, <strong>texturing</strong>, and <strong>antialiasing</strong>. The operation of the primitives is described here in a platform-agnostic way. Platform-specific documentation can be found in the API reference section.</p>
@@ -469,7 +441,7 @@ Background replaced with white
 </div>
 </div>
 <p>The middle image above shows the result of texture sampling using the interpolated texture coordinates from the previous step. Why is the background pink? The texture coordinates <span class="math inline">(<em>s</em>, <em>t</em>)</span> read as zero at those pixels, but that is a perfectly valid point to sample the texture. It happens that Spot's texture (left) has pink color at its <span class="math inline">(0, 0)</span> corner, and therefore all pixels in the background obtain that color as a result of the texture sampling operation. On the right, we have replaced the color of the <q>empty</q> pixels with a white color. Here's one way to do this in PyTorch:</p>
-<p><code> img_right = torch.where(rast_out[..., 3:] &gt; 0, img_left, torch.tensor(1.0).cuda()) </code></p>
+<div class="sourceCode" id="cb6"><pre class="sourceCode python"><code class="sourceCode python"><a class="sourceLine" id="cb6-1" data-line-number="1">img_right <span class="op">=</span> torch.where(rast_out[..., <span class="dv">3</span>:] <span class="op">&gt;</span> <span class="dv">0</span>, img_left, torch.tensor(<span class="fl">1.0</span>).cuda())</a></code></pre></div>
 <p>where <code>rast_out</code> is the output of the rasterization operation. We simply test if the <span class="math inline"><em>t</em><em>r</em><em>i</em><em>a</em><em>n</em><em>g</em><em>l</em><em>e</em>_<em>i</em><em>d</em></span> field, i.e., channel 3 of the rasterizer output, is greater than zero, indicating that a triangle was rendered in that pixel. If so, we take the color from the textured image, and otherwise we take constant 1.0.</p>
 <h3 id="antialiasing">Antialiasing</h3>
 <p>The last of the four primitive operations in nvdiffrast is antialiasing. Based on the geometry input (vertex positions and triangles), it will smooth out discontinuties at silhouette edges in a given image. The smoothing is based on a local approximation of coverage — an approximate integral over a pixel is calculated based on the exact location of relevant edges and the point-sampled colors at pixel centers.</p>
@@ -756,7 +728,8 @@ Mip level 5
 <p>Nvdiffrast comes with a set of samples that were crafted to support the research paper. Each sample is available in both PyTorch and TensorFlow versions. Details such as command-line parameters, logging format, etc., may not be identical between the versions, and generally the PyTorch versions should be considered definitive. The command-line examples below are for the PyTorch versions.</p>
 <h3 id="triangle.py">triangle.py</h3>
 <p>This is a minimal sample that renders a triangle and saves the resulting image into a file (<code>tri.png</code>) in the current directory. Running this should be the first step to verify that you have everything set up correctly. Rendering is done using the rasterization and interpolation operations, so getting the correct output image means that both OpenGL and CUDA are working as intended under the hood.</p>
-<p>Example command line: <code>python triangle.py</code></p>
+<p>Example command line:</p>
+<pre><code>python triangle.py</code></pre>
 <div class="image-parent">
 <div class="image-row">
 <div class="image-caption">
@@ -769,7 +742,8 @@ The expected output image
 </div>
 <h3 id="cube.py">cube.py</h3>
 <p>In this sample, we optimize the vertex positions and colors of a cube mesh, starting from a semi-randomly initialized state. The optimization is based on image-space loss in extremely low resolutions such as 4×4, 8×8, or 16×16 pixels. The goal of this sample is to examine the rate of geometrical convergence when the triangles are only a few pixels in size. It serves to illustrate that the antialiasing operation, despite being approximative, yields good enough position gradients even in 4×4 resolution to guide the optimization to the goal.</p>
-<p>Example command line: <code>python cube.py --resolution 16 --display-interval 10</code></p>
+<p>Example command line:</p>
+<pre><code>python cube.py --resolution 16 --display-interval 10</code></pre>
 <div class="image-parent">
 <div class="image-row">
 <div class="image-caption">
@@ -790,7 +764,7 @@ Rendering pipeline
 <p>In the pipeline diagram, green boxes indicate nvdiffrast operations, whereas blue boxes are other computation. Red boxes are the learned tensors and gray are non-learned tensors or other data.</p>
 <h3 id="earth.py">earth.py</h3>
 <p>The goal of this sample is to compare texture convergence with and without prefiltered texture sampling. The texture is learned based on image-space loss against high-quality reference renderings in random orientations and at random distances. When prefiltering is disabled, the texture is not learned properly because of spotty gradient updates caused by aliasing. This shows as a much worse PSNR for the texture, compared to learning with prefiltering enabled. See the paper for further discussion.</p>
-Example command lines:<br>
+<p>Example command lines:</p>
 <table>
 <tr>
 <td class="cmd">
@@ -828,7 +802,8 @@ Rendering pipeline
 <p>The interactive view shows the current texture mapped onto the mesh, with or without prefiltered texture sampling as specified via the command-line parameter. In this sample, no antialiasing is performed because we are not learning vertex positions and hence need no gradients related to them.</p>
 <h3 id="envphong.py">envphong.py</h3>
 <p>In this sample, a more complex shading model is used compared to the vertex colors or plain texture in the previous ones. Here, we learn a reflected environment map and parameters of a Phong BRDF model given a known mesh. The optimization is based on image-space loss against reference renderings in random orientations. The shading model of mirror reflection plus a Phong BRDF is not physically sensible, but it works as a reasonably simple strawman that would not be possible to implement with previous differentiable rasterizers that bundle rasterization, shading, lighting, and texturing together. The sample also illustrates the use of cube mapping for representing a learned texture in a spherical domain.</p>
-<p>Example command line: <code>python envphong.py --display-interval 10</code></p>
+<p>Example command line:</p>
+<pre><code>python envphong.py --display-interval 10</code></pre>
 <div class="image-parent">
 <div class="image-row">
 <div class="image-caption">
@@ -848,7 +823,8 @@ Rendering pipeline
 <p>In the interactive view, we see the rendering with the current environment map and Phong BRDF parameters, both gradually improving during the optimization.</p>
 <h3 id="pose.py">pose.py</h3>
 <p>Pose fitting based on an image-space loss is a classical task in differentiable rendering. In this sample, we solve a pose optimization problem with a simple cube with differently colored sides. We detail the optimization method in the paper, but in brief, it combines gradient-free greedy optimization in an initialization phase and gradient-based optimization in a fine-tuning phase.</p>
-<p>Example command line: <code>python pose.py --display-interval 10</code></p>
+<p>Example command line:</p>
+<pre><code>python pose.py --display-interval 10</code></pre>
 <div class="image-parent">
 <div class="image-row">
 <div class="image-caption">
@@ -952,7 +928,7 @@ severity will be silent.</td></tr></table></div>
 <p>Copyright © 2020, NVIDIA Corporation. All rights reserved.</p>
 <p>This work is made available under the <a href="https://github.com/NVlabs/nvdiffrast/blob/main/LICENSE.txt">Nvidia Source Code License</a>.</p>
 <p>For business inquiries, please contact <a href="mailto:researchinquiries@nvidia.com">researchinquiries@nvidia.com</a></p>
-<p>We do not currently accept outside code contributions in the form of pull requests.</p>
+<p>We do not currently accept outside contributions in the form of pull requests.</p>
 <p><a href="https://github.com/nigels-com/glew">GLEW</a> library redistributed under the <a href="http://glew.sourceforge.net/glew.txt">Modified BSD License</a>, the <a href="http://glew.sourceforge.net/mesa.txt">Mesa 3-D License</a> (MIT) and the <a href="http://glew.sourceforge.net/khronos.txt">Khronos License</a> (MIT). Environment map stored as part of <code>samples/data/envphong.npz</code> is derived from a Wave Engine <a href="https://github.com/WaveEngine/Samples/tree/master/Materials/EnvironmentMap/Content/Assets/CubeMap.cubemap">sample material</a> originally shared under <a href="https://github.com/WaveEngine/Samples/blob/master/LICENSE.md">MIT License</a>. Mesh and texture stored as part of <code>samples/data/earth.npz</code> are derived from <a href="https://www.turbosquid.com/3d-models/3d-realistic-earth-photorealistic-2k-1279125">3D Earth Photorealistic 2K</a> model originally made available under <a href="https://blog.turbosquid.com/turbosquid-3d-model-license/#3d-model-license">TurboSquid 3D Model License</a>.</p>
 <h2 id="citation">Citation</h2>
 <pre><code>@article{Laine2020diffrast,
