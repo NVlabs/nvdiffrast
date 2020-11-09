@@ -4,7 +4,7 @@
 
 **Modular Primitives for High-Performance Differentiable Rendering**<br>
 Samuli Laine, Janne Hellsten, Tero Karras, Yeongho Seol, Jaakko Lehtinen, Timo Aila<br>
-[http://arxiv.org/abs/xxxx.yyyyy](http://arxiv.org/abs/xxxx.yyyyy)
+[http://arxiv.org/abs/2011.03277](http://arxiv.org/abs/2011.03277)
 
 Nvdiffrast is a PyTorch/TensorFlow library that provides high-performance primitive operations for rasterization-based differentiable rendering.
 Please refer to &#x261E;&#x261E; [nvdiffrast documentation](https://nvlabs.github.io/nvdiffrast) &#x261C;&#x261C; for more information.
