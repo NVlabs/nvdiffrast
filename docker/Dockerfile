@@ -57,9 +57,9 @@ RUN pip install \
     glfw \
     imageio \
     imageio-ffmpeg \
-    pyopengl \
+    pyopengl
 
-
+RUN mkdir -p /tmp/pip
 COPY nvdiffrast /tmp/pip/nvdiffrast/
 COPY README.md setup.py /tmp/pip/
 RUN cd /tmp/pip && pip install .
