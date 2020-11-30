@@ -61,4 +61,4 @@ RUN pip install \
 COPY nvdiffrast /tmp/pip/nvdiffrast/
 COPY README.md setup.py /tmp/pip/
 RUN cd /tmp/pip && pip install .
-
+RUN rm -rf /tmp/*
