@@ -52,8 +52,13 @@ RUN mkdir -p /tmp && \
     SYSTEM=linux-egl make install && \
     rm -rf /tmp/glew-2.1.0.zip /tmp/glew-2.1.0
 
-RUN pip install imageio imageio-ffmpeg
+# Python dependencies
+RUN pip install \
+    imageio \
+    imageio-ffmpeg \
+    pyopengl
 
 COPY nvdiffrast /tmp/pip/nvdiffrast/
 COPY README.md setup.py /tmp/pip/
 RUN cd /tmp/pip && pip install .
+
