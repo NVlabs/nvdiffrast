@@ -315,16 +315,17 @@ div.image-parent {
 <li><a href="#geometry-and-minibatches-range-mode-vs-instanced-mode">Geometry and minibatches: Range mode vs Instanced mode</a></li>
 <li><a href="#image-space-derivatives">Image-space derivatives</a></li>
 <li><a href="#mipmaps-and-texture-dimensions">Mipmaps and texture dimensions</a></li>
+<li><a href="#running-on-multiple-gpus">Running on multiple GPUs</a></li>
 <li><a href="#differences-between-pytorch-and-tensorflow">Differences between PyTorch and TensorFlow</a><ul>
 <li><a href="#manual-opengl-contexts-in-pytorch">Manual OpenGL contexts in PyTorch</a></li>
 </ul></li>
 </ul></li>
 <li><a href="#samples">Samples</a><ul>
-<li><a href="#triangle.py">triangle.py</a></li>
-<li><a href="#cube.py">cube.py</a></li>
-<li><a href="#earth.py">earth.py</a></li>
-<li><a href="#envphong.py">envphong.py</a></li>
-<li><a href="#pose.py">pose.py</a></li>
+<li><a href="#triangle.py"><span>triangle.py</span></a></li>
+<li><a href="#cube.py"><span>cube.py</span></a></li>
+<li><a href="#earth.py"><span>earth.py</span></a></li>
+<li><a href="#envphong.py"><span>envphong.py</span></a></li>
+<li><a href="#pose.py"><span>pose.py</span></a></li>
 </ul></li>
 <li><a href="#pytorch-api-reference">PyTorch API reference</a></li>
 <li><a href="#licenses">Licenses</a></li>
@@ -373,7 +374,13 @@ Examples of things we've done with nvdiffrast
 <p>If the compiler binary (<code>cl.exe</code>) cannot be found in <code>PATH</code>, nvdiffrast will search for it heuristically. If this fails you may need to add it manually via</p>
 <pre><code>&quot;C:\Program Files (x86)\Microsoft Visual Studio\...\...\VC\Auxiliary\Build\vcvars64.bat&quot;</code></pre>
 <p>where the exact path depends on the version and edition of VS you have installed.</p>
-<p>To install nvdiffrast in your local site-packages, run <code>pip install .</code> at the root of the repository. Alternatively, you can add the repository root directory to your <code>PYTHONPATH</code>.</p>
+<p>To install nvdiffrast in your local site-packages, run:</p>
+<div class="sourceCode" id="cb6"><pre class="sourceCode bash"><code class="sourceCode bash"><a class="sourceLine" id="cb6-1" data-line-number="1"><span class="co"># Ninja is required run-time to build PyTorch extensions</span></a>
+<a class="sourceLine" id="cb6-2" data-line-number="2"><span class="ex">pip</span> install ninja</a>
+<a class="sourceLine" id="cb6-3" data-line-number="3"></a>
+<a class="sourceLine" id="cb6-4" data-line-number="4"><span class="co"># Run at the root of the repository to install nvdiffrast</span></a>
+<a class="sourceLine" id="cb6-5" data-line-number="5"><span class="ex">pip</span> install .</a></code></pre></div>
+<p>Instead of <code>pip install .</code> you can also just add the repository root directory to your <code>PYTHONPATH</code>.</p>
 <h2 id="primitive-operations">Primitive operations</h2>
 <p>Nvdiffrast offers four differentiable rendering primitives: <strong>rasterization</strong>, <strong>interpolation</strong>, <strong>texturing</strong>, and <strong>antialiasing</strong>. The operation of the primitives is described here in a platform-agnostic way. Platform-specific documentation can be found in the API reference section.</p>
 <p>In this section we ignore the minibatch axis for clarity and assume a minibatch size of one. However, all operations support minibatches as detailed later.</p>
@@ -441,7 +448,7 @@ Background replaced with white
 </div>
 </div>
 <p>The middle image above shows the result of texture sampling using the interpolated texture coordinates from the previous step. Why is the background pink? The texture coordinates <span class="math inline">(<em>s</em>, <em>t</em>)</span> read as zero at those pixels, but that is a perfectly valid point to sample the texture. It happens that Spot's texture (left) has pink color at its <span class="math inline">(0, 0)</span> corner, and therefore all pixels in the background obtain that color as a result of the texture sampling operation. On the right, we have replaced the color of the <q>empty</q> pixels with a white color. Here's one way to do this in PyTorch:</p>
-<div class="sourceCode" id="cb6"><pre class="sourceCode python"><code class="sourceCode python"><a class="sourceLine" id="cb6-1" data-line-number="1">img_right <span class="op">=</span> torch.where(rast_out[..., <span class="dv">3</span>:] <span class="op">&gt;</span> <span class="dv">0</span>, img_left, torch.tensor(<span class="fl">1.0</span>).cuda())</a></code></pre></div>
+<div class="sourceCode" id="cb7"><pre class="sourceCode python"><code class="sourceCode python"><a class="sourceLine" id="cb7-1" data-line-number="1">img_right <span class="op">=</span> torch.where(rast_out[..., <span class="dv">3</span>:] <span class="op">&gt;</span> <span class="dv">0</span>, img_left, torch.tensor(<span class="fl">1.0</span>).cuda())</a></code></pre></div>
 <p>where <code>rast_out</code> is the output of the rasterization operation. We simply test if the <span class="math inline"><em>t</em><em>r</em><em>i</em><em>a</em><em>n</em><em>g</em><em>l</em><em>e</em>_<em>i</em><em>d</em></span> field, i.e., channel 3 of the rasterizer output, is greater than zero, indicating that a triangle was rendered in that pixel. If so, we take the color from the textured image, and otherwise we take constant 1.0.</p>
 <h3 id="antialiasing">Antialiasing</h3>
 <p>The last of the four primitive operations in nvdiffrast is antialiasing. Based on the geometry input (vertex positions and triangles), it will smooth out discontinuties at silhouette edges in a given image. The smoothing is based on a local approximation of coverage — an approximate integral over a pixel is calculated based on the exact location of relevant edges and the point-sampled colors at pixel centers.</p>
@@ -515,7 +522,7 @@ For 2D textures, the coordinate origin <span class="math inline">(<em>s</em>, 
 <p>In <strong>instanced mode</strong>, the topology of the mesh will be shared for each minibatch index. The triangle tensor is still a 2D tensor with shape [<em>num_triangles</em>, 3], but the vertex positions are specified using a 3D tensor of shape [<em>minibatch_size</em>, <em>num_vertices</em>, 4]. With a 3D vertex position tensor, the rasterizer will not require the range tensor input, but will take the minibatch size from the first dimension of the vertex position tensor. The same triangles are rendered to each minibatch index, but with vertex positions taken from the corresponding slice of the vertex position tensor. In this mode, the attribute tensor in interpolation has to be a 3D tensor similar to position tensor, i.e., of shape [<em>minibatch_size</em>, <em>num_vertices</em>, <em>num_attributes</em>]. However, you can provide an attribute tensor with minibatch size of 1, and it will be broadcast across the minibatch.</p>
 <h3 id="image-space-derivatives">Image-space derivatives</h3>
 <p>We skirted around a pretty fundamental question in the description of the texturing operation above. In order to determine the proper amount of prefiltering for sampling a texture, we need to know how densely it is being sampled. But how can we know the sampling density when each pixel knows of a just a single surface point?</p>
-<p>The solution is to track the image-space derivatives of all things leading up to the texture sampling operation. <em>These are not the same thing as the gradients used in the backward pass</em>, even though they both involve differentiation! Consider the barycentrics <span class="math inline">(<em>u</em>, <em>v</em>)</span> produced by the rasterization operation. They change by some amount when moving horizontally or vertically in the image plane. If we denote the image-space coordinates as <span class="math inline">(<em>X</em>, <em>Y</em>)</span>, the image-space derivatives of the barycentrics would be <span class="math inline">∂<em>u</em>/∂<em>X</em></span>, <span class="math inline">∂<em>u</em>/∂<em>Y</em></span>, <span class="math inline">∂<em>v</em>/∂<em>X</em></span>, and <span class="math inline">∂<em>v</em>/∂<em>Y</em></span>. We can organize these into a 2×2 Jacobian matrix that describes the local relationship between <span class="math inline">(<em>u</em>, <em>v</em>)</span> and <span class="math inline">(<em>X</em>, <em>Y</em>)</span>. This matrix is generally different at every pixel.</p>
+<p>The solution is to track the image-space derivatives of all things leading up to the texture sampling operation. <em>These are not the same thing as the gradients used in the backward pass</em>, even though they both involve differentiation! Consider the barycentrics <span class="math inline">(<em>u</em>, <em>v</em>)</span> produced by the rasterization operation. They change by some amount when moving horizontally or vertically in the image plane. If we denote the image-space coordinates as <span class="math inline">(<em>X</em>, <em>Y</em>)</span>, the image-space derivatives of the barycentrics would be <span class="math inline">∂<em>u</em>/∂<em>X</em></span>, <span class="math inline">∂<em>u</em>/∂<em>Y</em></span>, <span class="math inline">∂<em>v</em>/∂<em>X</em></span>, and <span class="math inline">∂<em>v</em>/∂<em>Y</em></span>. We can organize these into a 2×2 Jacobian matrix that describes the local relationship between <span class="math inline">(<em>u</em>, <em>v</em>)</span> and <span class="math inline">(<em>X</em>, <em>Y</em>)</span>. This matrix is generally different at every pixel. For the purpose of image-space derivatives, the units of <span class="math inline"><em>X</em></span> and <span class="math inline"><em>Y</em></span> are pixels. Hence, <span class="math inline">∂<em>u</em>/∂<em>X</em></span> is the local approximation of how much <span class="math inline"><em>u</em></span> changes when moving a distance of one pixel in the horizontal direction, and so on.</p>
 <p>Once we know how the barycentrics change w.r.t. pixel position, the interpolation operation can use this to determine how the attributes change w.r.t. pixel position. When attributes are used as texture coordinates, we can therefore tell how the texture sampling position (in texture space) changes when moving around within the pixel (up to a local, linear approximation, that is). This <em>texture footprint</em> tells us the scale on which the texture should be prefiltered. In more practical terms, it tells us which mipmap level(s) to use when sampling the texture.</p>
 <p>In nvdiffrast, the rasterization operation can be configured to output the image-space derivatives of the barycentrics in an auxiliary 4-channel output tensor, ordered (<span class="math inline">∂<em>u</em>/∂<em>X</em></span>, <span class="math inline">∂<em>u</em>/∂<em>Y</em></span>, <span class="math inline">∂<em>v</em>/∂<em>X</em></span>, <span class="math inline">∂<em>v</em>/∂<em>Y</em></span>) from channel 0 to 3. The interpolation operation can take this auxiliary tensor as input and compute image-space derivatives of any set of attributes being interpolated. Finally, the texture sampling operation requires the image-space derivatives of the texture coordinates if a prefiltered sampling mode is being used.</p>
 <p>There is nothing magic about these image-space derivatives. They are tensors like the, e.g., the texture coordinates themselves, they propagate gradients backwards, and so on. For example, if you want to artificially blur or sharpen the texture when sampling it, you can simply multiply the tensor carrying the image-space derivatives of the texture coordinates <span class="math inline">∂{<em>s</em>, <em>t</em>}/∂{<em>X</em>, <em>Y</em>}</span> by a scalar value before feeding it into the texture sampling operation. This scales the texture footprints and thus adjusts the amount of prefiltering. If your loss function prefers a different level of sharpness, this multiplier will receive a nonzero gradient.</p>
@@ -713,6 +720,10 @@ Mip level 5
 </div>
 <p>Scaling the atlas to, say, 256×32 pixels would feel silly because the dimensions of the sub-images are perfectly fine, and downsampling the different sub-images together — which would happen after the 5×1 resolution — would not make sense anyway. For this reason, the texture sampling operation allows the user to specify the maximum number of mipmap levels to be constructed and used. In this case, setting <code>max_mip_level=5</code> would stop at the 5×1 mipmap and prevent the error.</p>
 <p>It is a deliberate design choice that nvdiffrast doesn't just stop automatically at a mipmap size it cannot downsample, but requires the user to specify a limit when the texture dimensions are not powers of two. The goal is to avoid bugs where prefiltered texture sampling mysteriously doesn't work due to an oddly sized texture. It would be confusing if a 256×256 texture gave beautifully prefiltered texture samples, a 255×255 texture suddenly had no prefiltering at all, and a 254×254 texture did just a bit of prefiltering (one level) but not more.</p>
+<h3 id="running-on-multiple-gpus">Running on multiple GPUs</h3>
+<p>Nvdiffrast supports computation on multiple GPUs in both PyTorch and TensorFlow. As is the convention in PyTorch, the operations are always executed on the device on which the input tensors reside. All GPU input tensors must reside on the same device, and the output tensors will unsurprisingly end up on that same device. In addition, the rasterization operation requires that its OpenGL context was created for the correct device. In TensorFlow, the OpenGL context is automatically created on the device of the rasterization operation when it is executed for the first time.</p>
+<p>On Windows, nvdiffrast implements OpenGL device selection in a way that can be done only once per process — after one context is created, all future ones will end up on the same GPU. Hence you cannot expect to run the rasterization operation on multiple GPUs within the same process. Trying to do so will either cause a crash or incur a significant performance penalty. However, with PyTorch it is common to distribute computation across GPUs by launching a separate process for each GPU, so this is not a huge concern. Note that any OpenGL context created within the same process, even for something like a GUI window, will prevent changing the device later. Therefore, if you want to run the rasterization operation on other than the default GPU, be sure to create its OpenGL context before initializing any other OpenGL-powered libraries.</p>
+<p>On Linux everything just works, and you can create rasterizer OpenGL contexts on multiple devices within the same process.</p>
 <h3 id="differences-between-pytorch-and-tensorflow">Differences between PyTorch and TensorFlow</h3>
 <p>Nvdiffrast can be used from PyTorch and from TensorFlow 1.x; the latter may change to TensorFlow 2.x if there is demand. These frameworks operate somewhat differently and that is reflected in the respective APIs. Simplifying a bit, in TensorFlow 1.x you construct a persistent graph out of persistent nodes, and run many batches of data through it. In PyTorch, there is no persistent graph or nodes, but a new, ephemeral graph is constructed for each batch of data and destroyed immediately afterwards. Therefore, there is also no persistent state for the operations. There is the <code>torch.nn.Module</code> abstraction for festooning operations with persistent state, but we do not use it.</p>
 <p>As a consequence, things that would be part of persistent state of an nvdiffrast operation in TensorFlow must be stored by the user in PyTorch, and supplied to the operations as needed. In practice, this is a very small difference and amounts to just a couple of lines of code in most cases.</p>
@@ -726,7 +737,7 @@ Mip level 5
 <p>In manual mode, the user assumes the responsibility of setting and releasing the OpenGL context. Most of the time, if you don't have any other libraries that would be using OpenGL, you can just set the context once after having created it and keep it set until the program exits. However, keep in mind that the active OpenGL context is a thread-local resource, so it needs to be set in the same CPU thread as it will be used, and it cannot be set simultaneously in multiple CPU threads.</p>
 <h2 id="samples">Samples</h2>
 <p>Nvdiffrast comes with a set of samples that were crafted to support the research paper. Each sample is available in both PyTorch and TensorFlow versions. Details such as command-line parameters, logging format, etc., may not be identical between the versions, and generally the PyTorch versions should be considered definitive. The command-line examples below are for the PyTorch versions.</p>
-<h3 id="triangle.py">triangle.py</h3>
+<h3 id="triangle.py"><a href="https://github.com/NVlabs/nvdiffrast/blob/main/samples/torch/triangle.py">triangle.py</a></h3>
 <p>This is a minimal sample that renders a triangle and saves the resulting image into a file (<code>tri.png</code>) in the current directory. Running this should be the first step to verify that you have everything set up correctly. Rendering is done using the rasterization and interpolation operations, so getting the correct output image means that both OpenGL and CUDA are working as intended under the hood.</p>
 <p>Example command line:</p>
 <pre><code>python triangle.py</code></pre>
@@ -740,7 +751,7 @@ The expected output image
 </div>
 </div>
 </div>
-<h3 id="cube.py">cube.py</h3>
+<h3 id="cube.py"><a href="https://github.com/NVlabs/nvdiffrast/blob/main/samples/torch/cube.py">cube.py</a></h3>
 <p>In this sample, we optimize the vertex positions and colors of a cube mesh, starting from a semi-randomly initialized state. The optimization is based on image-space loss in extremely low resolutions such as 4×4, 8×8, or 16×16 pixels. The goal of this sample is to examine the rate of geometrical convergence when the triangles are only a few pixels in size. It serves to illustrate that the antialiasing operation, despite being approximative, yields good enough position gradients even in 4×4 resolution to guide the optimization to the goal.</p>
 <p>Example command line:</p>
 <pre><code>python cube.py --resolution 16 --display-interval 10</code></pre>
@@ -762,7 +773,7 @@ Rendering pipeline
 </div>
 <p>The image above shows a live view of the sample. Top row shows the low-resolution rendered image and reference image that the image-space loss is calculated from. Bottom row shows the current mesh (and colors) and reference mesh in high resolution so that convergence can be seen more easily visually.</p>
 <p>In the pipeline diagram, green boxes indicate nvdiffrast operations, whereas blue boxes are other computation. Red boxes are the learned tensors and gray are non-learned tensors or other data.</p>
-<h3 id="earth.py">earth.py</h3>
+<h3 id="earth.py"><a href="https://github.com/NVlabs/nvdiffrast/blob/main/samples/torch/earth.py">earth.py</a></h3>
 <p>The goal of this sample is to compare texture convergence with and without prefiltered texture sampling. The texture is learned based on image-space loss against high-quality reference renderings in random orientations and at random distances. When prefiltering is disabled, the texture is not learned properly because of spotty gradient updates caused by aliasing. This shows as a much worse PSNR for the texture, compared to learning with prefiltering enabled. See the paper for further discussion.</p>
 <p>Example command lines:</p>
 <table>
@@ -800,7 +811,7 @@ Rendering pipeline
 </div>
 </div>
 <p>The interactive view shows the current texture mapped onto the mesh, with or without prefiltered texture sampling as specified via the command-line parameter. In this sample, no antialiasing is performed because we are not learning vertex positions and hence need no gradients related to them.</p>
-<h3 id="envphong.py">envphong.py</h3>
+<h3 id="envphong.py"><a href="https://github.com/NVlabs/nvdiffrast/blob/main/samples/torch/envphong.py">envphong.py</a></h3>
 <p>In this sample, a more complex shading model is used compared to the vertex colors or plain texture in the previous ones. Here, we learn a reflected environment map and parameters of a Phong BRDF model given a known mesh. The optimization is based on image-space loss against reference renderings in random orientations. The shading model of mirror reflection plus a Phong BRDF is not physically sensible, but it works as a reasonably simple strawman that would not be possible to implement with previous differentiable rasterizers that bundle rasterization, shading, lighting, and texturing together. The sample also illustrates the use of cube mapping for representing a learned texture in a spherical domain.</p>
 <p>Example command line:</p>
 <pre><code>python envphong.py --display-interval 10</code></pre>
@@ -821,7 +832,7 @@ Rendering pipeline
 </div>
 </div>
 <p>In the interactive view, we see the rendering with the current environment map and Phong BRDF parameters, both gradually improving during the optimization.</p>
-<h3 id="pose.py">pose.py</h3>
+<h3 id="pose.py"><a href="https://github.com/NVlabs/nvdiffrast/blob/main/samples/torch/pose.py">pose.py</a></h3>
 <p>Pose fitting based on an image-space loss is a classical task in differentiable rendering. In this sample, we solve a pose optimization problem with a simple cube with differently colored sides. We detail the optimization method in the paper, but in brief, it combines gradient-free greedy optimization in an initialization phase and gradient-based optimization in a fine-tuning phase.</p>
 <p>Example command line:</p>
 <pre><code>python pose.py --display-interval 10</code></pre>
@@ -838,10 +849,13 @@ Interactive view of pose.py
 <p>The interactive view shows, from left to right: target pose, best found pose, and current pose. When viewed live, the two stages of optimization are clearly visible. In the first phase, the best pose updates intermittently when a better initialization is found. In the second phase, the solution converges smoothly to the target via gradient-based optimization.</p>
 <h2 id="pytorch-api-reference">PyTorch API reference</h2>
 <div style="padding-top: 1em;">
-<div class="apifunc"><h4><code>nvdiffrast.torch.RasterizeGLContext(<em>output_db</em>=<span class="defarg">True</span>, <em>mode</em>=<span class="defarg">'automatic'</span>)</code>&nbsp;<span class="sym_class">Class</span></h4>
+<div class="apifunc"><h4><code>nvdiffrast.torch.RasterizeGLContext(<em>output_db</em>=<span class="defarg">True</span>, <em>mode</em>=<span class="defarg">'automatic'</span>, <em>device</em>=<span class="defarg">None</span>)</code>&nbsp;<span class="sym_class">Class</span></h4>
 <p class="shortdesc">Create a new OpenGL rasterizer context.</p><p class="longdesc">Creating an OpenGL context is a slow operation so you should reuse the same
 context in all calls to <code>rasterize()</code> on the same CPU thread. The OpenGL context
-is deleted when the object is destroyed.</p><div class="arguments">Arguments:</div><table class="args"><tr class="arg"><td class="argname">output_db</td><td class="arg_short">Compute and output image-space derivates of barycentrics.</td></tr><tr class="arg"><td class="argname">mode</td><td class="arg_short">OpenGL context handling mode. Valid values are 'manual' and 'automatic'.</td></tr></table><div class="methods">Methods, only available if context was created in manual mode:</div><table class="args"><tr class="arg"><td class="argname">set_context()</td><td class="arg_short">Set (activate) OpenGL context in the current CPU thread.</td></tr><tr class="arg"><td class="argname">release_context()</td><td class="arg_short">Release (deactivate) currently active OpenGL context.</td></tr></table><div class="returns">Returns:<div class="return_description">The newly created OpenGL rasterizer context.</div></div></div>
+is deleted when the object is destroyed.</p><div class="arguments">Arguments:</div><table class="args"><tr class="arg"><td class="argname">output_db</td><td class="arg_short">Compute and output image-space derivates of barycentrics.</td></tr><tr class="arg"><td class="argname">mode</td><td class="arg_short">OpenGL context handling mode. Valid values are 'manual' and 'automatic'.</td></tr><tr class="arg"><td class="argname">device</td><td class="arg_short">Cuda device on which the context is created. Type can be
+<code>torch.device</code>, string (e.g., <code>'cuda:1'</code>), or int. If not
+specified, context will be created on currently active Cuda
+device.</td></tr></table><div class="methods">Methods, only available if context was created in manual mode:</div><table class="args"><tr class="arg"><td class="argname">set_context()</td><td class="arg_short">Set (activate) OpenGL context in the current CPU thread.</td></tr><tr class="arg"><td class="argname">release_context()</td><td class="arg_short">Release (deactivate) currently active OpenGL context.</td></tr></table><div class="returns">Returns:<div class="return_description">The newly created OpenGL rasterizer context.</div></div></div>
 <div class="apifunc"><h4><code>nvdiffrast.torch.rasterize(<em>glctx</em>, <em>pos</em>, <em>tri</em>, <em>resolution</em>, <em>ranges</em>=<span class="defarg">None</span>, <em>grad_db</em>=<span class="defarg">True</span>)</code>&nbsp;<span class="sym_function">Function</span></h4>
 <p class="shortdesc">Rasterize triangles.</p><p class="longdesc">All input tensors must be contiguous and reside in GPU memory except for
 the <code>ranges</code> tensor that, if specified, has to reside in CPU memory. The 
@@ -875,23 +889,24 @@ the image-space derivatives of the selected attributes and has shape
 first selected attribute A will be on channels 0 and 1 as (dA/dX, dA/dY), etc.
 Otherwise, the second output tensor will be an empty tensor with shape
 [minibatch_size, height, width, 0].</div></div></div>
-<div class="apifunc"><h4><code>nvdiffrast.torch.texture(<em>tex</em>, <em>uv</em>, <em>uv_da</em>=<span class="defarg">None</span>, <em>mip</em>=<span class="defarg">None</span>, <em>filter_mode</em>=<span class="defarg">'auto'</span>, <em>boundary_mode</em>=<span class="defarg">'wrap'</span>, <em>max_mip_level</em>=<span class="defarg">None</span>)</code>&nbsp;<span class="sym_function">Function</span></h4>
+<div class="apifunc"><h4><code>nvdiffrast.torch.texture(<em>tex</em>, <em>uv</em>, <em>uv_da</em>=<span class="defarg">None</span>, <em>mip_level_bias</em>=<span class="defarg">None</span>, <em>mip</em>=<span class="defarg">None</span>, <em>filter_mode</em>=<span class="defarg">'auto'</span>, <em>boundary_mode</em>=<span class="defarg">'wrap'</span>, <em>max_mip_level</em>=<span class="defarg">None</span>)</code>&nbsp;<span class="sym_function">Function</span></h4>
 <p class="shortdesc">Perform texture sampling.</p><p class="longdesc">All input tensors must be contiguous and reside in GPU memory. The output tensor
 will be contiguous and reside in GPU memory.</p><div class="arguments">Arguments:</div><table class="args"><tr class="arg"><td class="argname">tex</td><td class="arg_short">Texture tensor with dtype <code>torch.float32</code>. For 2D textures, must have shape
 [minibatch_size, tex_height, tex_width, tex_channels]. For cube map textures,
 must have shape [minibatch_size, 6, tex_height, tex_width, tex_channels] where
-tex_width and tex_height are equal. Note that <code>boundary_mode</code> must also be set 
-to 'cube' to enable cube map mode. Broadcasting is supported along the minibatch axis.</td></tr><tr class="arg"><td class="argname">uv</td><td class="arg_short">Tensor containing per-pixel texture coordinates. When sampling a 2D texture, 
+tex_width and tex_height are equal. Note that <code>boundary_mode</code> must also be set
+to 'cube' to enable cube map mode. Broadcasting is supported along the minibatch axis.</td></tr><tr class="arg"><td class="argname">uv</td><td class="arg_short">Tensor containing per-pixel texture coordinates. When sampling a 2D texture,
 must have shape [minibatch_size, height, width, 2]. When sampling a cube map
 texture, must have shape [minibatch_size, height, width, 3].</td></tr><tr class="arg"><td class="argname">uv_da</td><td class="arg_short">(Optional) Tensor containing image-space derivatives of texture coordinates.
 Must have same shape as <code>uv</code> except for the last dimension that is to be twice
-as long.</td></tr><tr class="arg"><td class="argname">mip</td><td class="arg_short">(Optional) Preconstructed mipmap stack from a <code>texture_construct_mip()</code> call. If not
-specified, the mipmap stack is constructed internally and discarded afterwards.</td></tr><tr class="arg"><td class="argname">filter_mode</td><td class="arg_short">Texture filtering mode to be used. Valid values are 'auto', 'nearest', 
+as long.</td></tr><tr class="arg"><td class="argname">mip_level_bias</td><td class="arg_short">(Optional) Per-pixel bias for mip level selection. If <code>uv_da</code> is omitted,
+determines mip level directly. Must have shape [minibatch_size, height, width].</td></tr><tr class="arg"><td class="argname">mip</td><td class="arg_short">(Optional) Preconstructed mipmap stack from a <code>texture_construct_mip()</code> call. If not
+specified, the mipmap stack is constructed internally and discarded afterwards.</td></tr><tr class="arg"><td class="argname">filter_mode</td><td class="arg_short">Texture filtering mode to be used. Valid values are 'auto', 'nearest',
 'linear', 'linear-mipmap-nearest', and 'linear-mipmap-linear'. Mode 'auto'
-selects 'linear' if <code>uv_da</code> is not specified, and 'linear-mipmap-linear'
-when <code>uv_da</code> is specified, these being the highest-quality modes possible
-depending on the availability of the image-space derivatives of the texture
-coordinates.</td></tr><tr class="arg"><td class="argname">boundary_mode</td><td class="arg_short">Valid values are 'wrap', 'clamp', 'zero', and 'cube'. If <code>tex</code> defines a
+selects 'linear' if neither <code>uv_da</code> or <code>mip_level_bias</code> is specified, and
+'linear-mipmap-linear' when at least one of them is specified, these being
+the highest-quality modes possible depending on the availability of the
+image-space derivatives of the texture coordinates or direct mip level information.</td></tr><tr class="arg"><td class="argname">boundary_mode</td><td class="arg_short">Valid values are 'wrap', 'clamp', 'zero', and 'cube'. If <code>tex</code> defines a
 cube map, this must be set to 'cube'. The default mode 'wrap' takes fractional
 part of texture coordinates. Mode 'clamp' clamps texture coordinates to the
 centers of the boundary texels. Mode 'zero' virtually extends the texture with
@@ -915,9 +930,9 @@ GPU memory.</td></tr></table><div class="returns">Returns:<div class="return_des
 <p class="shortdesc">Get current log level.</p><p class="longdesc"></p><div class="returns">Returns:<div class="return_description">Current log level in nvdiffrast. See <code>set_log_level()</code> for possible values.</div></div></div>
 <div class="apifunc"><h4><code>nvdiffrast.torch.set_log_level(<em>level</em>)</code>&nbsp;<span class="sym_function">Function</span></h4>
 <p class="shortdesc">Set log level.</p><p class="longdesc">Log levels follow the convention on the C++ side of Torch:
-  0 = Info, 
-  1 = Warning, 
-  2 = Error, 
+  0 = Info,
+  1 = Warning,
+  2 = Error,
   3 = Fatal.
 The default log level is 1.</p><div class="arguments">Arguments:</div><table class="args"><tr class="arg"><td class="argname">level</td><td class="arg_short">New log level as integer. Internal nvdiffrast messages of this 
 severity or higher will be printed, while messages of lower

@@ -50,7 +50,7 @@ static __device__ __forceinline__ int4 wrapCubeMap(int face, int ix0, int ix1, i
     int cy = (iy0 < 0) ? 0 : (iy1 >= w) ? 6 : 3;
     int c = cx + cy;
     if (c >= 5)
-        c--; 
+        c--;
     c = (face << 3) + c;
 
     // Compute coordinates and faces.
@@ -250,7 +250,7 @@ static __device__ __forceinline__ void indexCubeMapGrad2(float3 uv, float3 dvdX,
     float mv = (idx & 0x2e) ? -mm : mm;
     gu *= -2.0 * m * mu;
     gv *= -2.0 * m * mv;
-    
+
     if (idx & 0x03)
     {
         dx.x = gu * dvdX.x + dm * dvdX.z;
@@ -311,7 +311,7 @@ static __device__ __forceinline__ int indexTextureNearest(const TextureKernelPar
 
     // Cube map indexing.
     if (CUBE_MODE)
-    {   
+    {
         // No wrap. Fold face index into tz right away.
         tz = 6 * tz + indexCubeMap(u, v, uv.z); // Rewrites u, v.
     }
@@ -379,7 +379,7 @@ static __device__ __forceinline__ float2 indexTextureLinear(const TextureKernelP
         // Move to texel space.
         u = u * (float)w - 0.5f;
         v = v * (float)h - 0.5f;
-        
+
         if (p.boundaryMode == TEX_BOUNDARY_MODE_CLAMP)
         {
             // Clamp to center of edge texels.
@@ -387,7 +387,7 @@ static __device__ __forceinline__ float2 indexTextureLinear(const TextureKernelP
             v = fminf(fmaxf(v, 0.f), h - 1.f);
             clampU = (u == 0.f || u == w - 1.f);
             clampV = (v == 0.f || v == h - 1.f);
-        } 
+        }
     }
 
     // Compute texel coordinates and weights.
@@ -397,7 +397,7 @@ static __device__ __forceinline__ float2 indexTextureLinear(const TextureKernelP
     int iv1 = iv0 + (clampV ? 0 : 1);
     u -= (float)iu0;
     v -= (float)iv0;
-    
+
     // Cube map wrapping.
     bool cubeWrap = CUBE_MODE && (iu0 < 0 || iv0 < 0 || iu1 >= w || iv1 >= h);
     if (cubeWrap)
@@ -448,107 +448,109 @@ static __device__ __forceinline__ float2 indexTextureLinear(const TextureKernelP
 //------------------------------------------------------------------------
 // Mip level calculation.
 
-template <bool CUBE_MODE, int FILTER_MODE>
+template <bool CUBE_MODE, bool BIAS_ONLY, int FILTER_MODE>
 static __device__ __forceinline__ void calculateMipLevel(int& level0, int& level1, float& flevel, const TextureKernelParams& p, int pidx, float3 uv, float4* pdw, float3* pdfdv)
 {
     // Do nothing if mips not in use.
     if (FILTER_MODE == TEX_MODE_NEAREST || FILTER_MODE == TEX_MODE_LINEAR)
         return;
 
-    // Get pixel derivatives of texture coordinates.
-    float4 uvDA;
-    float3 dvdX, dvdY; // Gradients use these later.
-    if (CUBE_MODE)
+    // Determine mip level based on UV pixel derivatives. If no derivatives are given (mip level bias only), leave as zero.
+    if (!BIAS_ONLY)
     {
-        // Fetch.
-        float2 d0 = ((const float2*)p.uvDA)[3 * pidx + 0];
-        float2 d1 = ((const float2*)p.uvDA)[3 * pidx + 1];
-        float2 d2 = ((const float2*)p.uvDA)[3 * pidx + 2];    
-
-        // Map d{x,y,z}/d{X,Y} into d{s,t}/d{X,Y}.
-        dvdX = make_float3(d0.x, d1.x, d2.x); // d{x,y,z}/dX
-        dvdY = make_float3(d0.y, d1.y, d2.y); // d{x,y,z}/dY
-        uvDA = indexCubeMapGradST(uv, dvdX, dvdY); // d{s,t}/d{X,Y}
-    }
-    else
-    {
-        // Fetch.
-        uvDA = ((const float4*)p.uvDA)[pidx];
-    }
-
-    // Scaling factors.
-    float uscl = p.texWidth;
-    float vscl = p.texHeight;
-
-    // d[s,t]/d[X,Y].
-    float dsdx = uvDA.x * uscl;
-    float dsdy = uvDA.y * uscl;
-    float dtdx = uvDA.z * vscl;
-    float dtdy = uvDA.w * vscl;
-
-    // Calculate footprint axis lengths.
-    float A = dsdx*dsdx + dtdx*dtdx;
-    float B = dsdy*dsdy + dtdy*dtdy;
-    float C = dsdx*dsdy + dtdx*dtdy;
-    float l2b = 0.5 * (A + B);
-    float l2n = 0.25 * (A-B)*(A-B) + C*C;
-    float l2a = sqrt(l2n);
-    float lenMinorSqr = fmaxf(0.0, l2b - l2a);
-    float lenMajorSqr = l2b + l2a;
-
-    // Footprint vs. mip level gradient.
-    if (pdw && FILTER_MODE == TEX_MODE_LINEAR_MIPMAP_LINEAR)
-    {
-        float dw   = 0.72134752f / (l2n + l2a * l2b); // Constant is 0.5/ln(2).
-        float AB   = dw * .5f * (A - B);
-        float Cw   = dw * C;
-        float l2aw = dw * l2a;
-        float d_f_ddsdX = uscl * (dsdx * (l2aw + AB) + dsdy * Cw);
-        float d_f_ddsdY = uscl * (dsdy * (l2aw - AB) + dsdx * Cw);
-        float d_f_ddtdX = vscl * (dtdx * (l2aw + AB) + dtdy * Cw);
-        float d_f_ddtdY = vscl * (dtdy * (l2aw - AB) + dtdx * Cw);
-
-        *pdw = make_float4(d_f_ddsdX, d_f_ddsdY, d_f_ddtdX, d_f_ddtdY);
-    
-        // In cube maps, there is also a texture coordinate vs. mip level gradient.
+        // Get pixel derivatives of texture coordinates.
+        float4 uvDA;
+        float3 dvdX, dvdY; // Gradients use these later.
         if (CUBE_MODE)
         {
-            float4 dx, dy, dz;
-            indexCubeMapGrad2(uv, dvdX, dvdY, dx, dy, dz);
+            // Fetch.
+            float2 d0 = ((const float2*)p.uvDA)[3 * pidx + 0];
+            float2 d1 = ((const float2*)p.uvDA)[3 * pidx + 1];
+            float2 d2 = ((const float2*)p.uvDA)[3 * pidx + 2];
 
-            float3 d_dsdX_dv = make_float3(dx.x, dy.x, dz.x);
-            float3 d_dsdY_dv = make_float3(dx.y, dy.y, dz.y);
-            float3 d_dtdX_dv = make_float3(dx.z, dy.z, dz.z);
-            float3 d_dtdY_dv = make_float3(dx.w, dy.w, dz.w);
-
-            float3 d_f_dv = make_float3(0.f, 0.f, 0.f);
-            d_f_dv += d_dsdX_dv * d_f_ddsdX;
-            d_f_dv += d_dsdY_dv * d_f_ddsdY;
-            d_f_dv += d_dtdX_dv * d_f_ddtdX;
-            d_f_dv += d_dtdY_dv * d_f_ddtdY;
-
-            *pdfdv = d_f_dv;
+            // Map d{x,y,z}/d{X,Y} into d{s,t}/d{X,Y}.
+            dvdX = make_float3(d0.x, d1.x, d2.x); // d{x,y,z}/dX
+            dvdY = make_float3(d0.y, d1.y, d2.y); // d{x,y,z}/dY
+            uvDA = indexCubeMapGradST(uv, dvdX, dvdY); // d{s,t}/d{X,Y}
         }
+        else
+        {
+            // Fetch.
+            uvDA = ((const float4*)p.uvDA)[pidx];
+        }
+
+        // Scaling factors.
+        float uscl = p.texWidth;
+        float vscl = p.texHeight;
+
+        // d[s,t]/d[X,Y].
+        float dsdx = uvDA.x * uscl;
+        float dsdy = uvDA.y * uscl;
+        float dtdx = uvDA.z * vscl;
+        float dtdy = uvDA.w * vscl;
+
+        // Calculate footprint axis lengths.
+        float A = dsdx*dsdx + dtdx*dtdx;
+        float B = dsdy*dsdy + dtdy*dtdy;
+        float C = dsdx*dsdy + dtdx*dtdy;
+        float l2b = 0.5 * (A + B);
+        float l2n = 0.25 * (A-B)*(A-B) + C*C;
+        float l2a = sqrt(l2n);
+        float lenMinorSqr = fmaxf(0.0, l2b - l2a);
+        float lenMajorSqr = l2b + l2a;
+
+        // Footprint vs. mip level gradient.
+        if (pdw && FILTER_MODE == TEX_MODE_LINEAR_MIPMAP_LINEAR)
+        {
+            float dw   = 0.72134752f / (l2n + l2a * l2b); // Constant is 0.5/ln(2).
+            float AB   = dw * .5f * (A - B);
+            float Cw   = dw * C;
+            float l2aw = dw * l2a;
+            float d_f_ddsdX = uscl * (dsdx * (l2aw + AB) + dsdy * Cw);
+            float d_f_ddsdY = uscl * (dsdy * (l2aw - AB) + dsdx * Cw);
+            float d_f_ddtdX = vscl * (dtdx * (l2aw + AB) + dtdy * Cw);
+            float d_f_ddtdY = vscl * (dtdy * (l2aw - AB) + dtdx * Cw);
+
+            *pdw = make_float4(d_f_ddsdX, d_f_ddsdY, d_f_ddtdX, d_f_ddtdY);
+
+            // In cube maps, there is also a texture coordinate vs. mip level gradient.
+            if (CUBE_MODE)
+            {
+                float4 dx, dy, dz;
+                indexCubeMapGrad2(uv, dvdX, dvdY, dx, dy, dz);
+
+                float3 d_dsdX_dv = make_float3(dx.x, dy.x, dz.x);
+                float3 d_dsdY_dv = make_float3(dx.y, dy.y, dz.y);
+                float3 d_dtdX_dv = make_float3(dx.z, dy.z, dz.z);
+                float3 d_dtdY_dv = make_float3(dx.w, dy.w, dz.w);
+
+                float3 d_f_dv = make_float3(0.f, 0.f, 0.f);
+                d_f_dv += d_dsdX_dv * d_f_ddsdX;
+                d_f_dv += d_dsdY_dv * d_f_ddsdY;
+                d_f_dv += d_dtdX_dv * d_f_ddtdX;
+                d_f_dv += d_dtdY_dv * d_f_ddtdY;
+
+                *pdfdv = d_f_dv;
+            }
+        }
+
+        // Finally, calculate mip level.
+        flevel = .5f * __log2f(lenMajorSqr);
     }
 
-    // Calculate true mip level and clamp.
-    flevel = .5f * __log2f(lenMajorSqr);
+    // Bias the mip level and clamp.
+    if (p.mipLevelBias)
+        flevel += p.mipLevelBias[pidx];
     flevel = fminf(fmaxf(flevel, 0.f), (float)p.mipLevelMax);
 
-    if (FILTER_MODE == TEX_MODE_LINEAR_MIPMAP_NEAREST)
+    // Calculate levels depending on filter mode.
+    level0 = __float2int_rd(flevel);
+
+    // Leave everything else at zero if flevel == 0 (magnification) or when in linear-mipmap-nearest mode.
+    if (FILTER_MODE == TEX_MODE_LINEAR_MIPMAP_LINEAR && flevel > 0.f)
     {
-        // Linear-mipmap-nearest.
-        level0 = __float2int_rn(flevel);
-    }
-    else
-    {
-        // Linear-mipmap-linear.
-        if (flevel > 0.f) // Leave everything at zero if flevel == 0 (magnification)
-        {
-            level0 = __float2int_rd(flevel);
-            level1 = min(level0 + 1, p.mipLevelMax);
-            flevel -= level0; // Fractional part. Zero if clamped on last level.
-        }
+        level1 = min(level0 + 1, p.mipLevelMax);
+        flevel -= level0; // Fractional part. Zero if clamped on last level.
     }
 }
 
@@ -672,7 +674,7 @@ __global__ void MipBuildKernel4(const TextureKernelParams p) { MipBuildKernelTem
 //------------------------------------------------------------------------
 // Forward kernel.
 
-template <class T, int C, bool CUBE_MODE, int FILTER_MODE>
+template <class T, int C, bool CUBE_MODE, bool BIAS_ONLY, int FILTER_MODE>
 static __forceinline__ __device__ void TextureFwdKernelTemplate(const TextureKernelParams p)
 {
     // Calculate pixel position.
@@ -702,7 +704,7 @@ static __forceinline__ __device__ void TextureFwdKernelTemplate(const TextureKer
         int tc = indexTextureNearest<CUBE_MODE>(p, uv, tz);
         tc *= p.channels;
         const float* pIn = p.tex;
-        
+
         // Copy if valid tc, otherwise output zero.
         for (int i=0; i < p.channels; i += C)
             *((T*)&pOut[i]) = (tc >= 0) ? *((const T*)&pIn[tc + i]) : zero_value<T>();
@@ -714,7 +716,7 @@ static __forceinline__ __device__ void TextureFwdKernelTemplate(const TextureKer
     float  flevel = 0.f; // Fractional level.
     int    level0 = 0;   // Discrete level 0.
     int    level1 = 0;   // Discrete level 1.
-    calculateMipLevel<CUBE_MODE, FILTER_MODE>(level0, level1, flevel, p, pidx, uv, 0, 0);
+    calculateMipLevel<CUBE_MODE, BIAS_ONLY, FILTER_MODE>(level0, level1, flevel, p, pidx, uv, 0, 0);
 
     // Get texel indices and pointer for level 0.
     int4 tc0 = make_int4(0, 0, 0, 0);
@@ -766,30 +768,42 @@ static __forceinline__ __device__ void TextureFwdKernelTemplate(const TextureKer
 }
 
 // Template specializations.
-__global__ void TextureFwdKernelNearest1                 (const TextureKernelParams p) { TextureFwdKernelTemplate<float,  1, false, TEX_MODE_NEAREST>(p); }
-__global__ void TextureFwdKernelNearest2                 (const TextureKernelParams p) { TextureFwdKernelTemplate<float2, 2, false, TEX_MODE_NEAREST>(p); }
-__global__ void TextureFwdKernelNearest4                 (const TextureKernelParams p) { TextureFwdKernelTemplate<float4, 4, false, TEX_MODE_NEAREST>(p); }
-__global__ void TextureFwdKernelLinear1                  (const TextureKernelParams p) { TextureFwdKernelTemplate<float,  1, false, TEX_MODE_LINEAR>(p); }
-__global__ void TextureFwdKernelLinear2                  (const TextureKernelParams p) { TextureFwdKernelTemplate<float2, 2, false, TEX_MODE_LINEAR>(p); }
-__global__ void TextureFwdKernelLinear4                  (const TextureKernelParams p) { TextureFwdKernelTemplate<float4, 4, false, TEX_MODE_LINEAR>(p); }
-__global__ void TextureFwdKernelLinearMipmapNearest1     (const TextureKernelParams p) { TextureFwdKernelTemplate<float,  1, false, TEX_MODE_LINEAR_MIPMAP_NEAREST>(p); }
-__global__ void TextureFwdKernelLinearMipmapNearest2     (const TextureKernelParams p) { TextureFwdKernelTemplate<float2, 2, false, TEX_MODE_LINEAR_MIPMAP_NEAREST>(p); }
-__global__ void TextureFwdKernelLinearMipmapNearest4     (const TextureKernelParams p) { TextureFwdKernelTemplate<float4, 4, false, TEX_MODE_LINEAR_MIPMAP_NEAREST>(p); }
-__global__ void TextureFwdKernelLinearMipmapLinear1      (const TextureKernelParams p) { TextureFwdKernelTemplate<float,  1, false, TEX_MODE_LINEAR_MIPMAP_LINEAR>(p); }
-__global__ void TextureFwdKernelLinearMipmapLinear2      (const TextureKernelParams p) { TextureFwdKernelTemplate<float2, 2, false, TEX_MODE_LINEAR_MIPMAP_LINEAR>(p); }
-__global__ void TextureFwdKernelLinearMipmapLinear4      (const TextureKernelParams p) { TextureFwdKernelTemplate<float4, 4, false, TEX_MODE_LINEAR_MIPMAP_LINEAR>(p); }
-__global__ void TextureFwdKernelCubeNearest1             (const TextureKernelParams p) { TextureFwdKernelTemplate<float,  1, true,  TEX_MODE_NEAREST>(p); }
-__global__ void TextureFwdKernelCubeNearest2             (const TextureKernelParams p) { TextureFwdKernelTemplate<float2, 2, true,  TEX_MODE_NEAREST>(p); }
-__global__ void TextureFwdKernelCubeNearest4             (const TextureKernelParams p) { TextureFwdKernelTemplate<float4, 4, true,  TEX_MODE_NEAREST>(p); }
-__global__ void TextureFwdKernelCubeLinear1              (const TextureKernelParams p) { TextureFwdKernelTemplate<float,  1, true,  TEX_MODE_LINEAR>(p); }
-__global__ void TextureFwdKernelCubeLinear2              (const TextureKernelParams p) { TextureFwdKernelTemplate<float2, 2, true,  TEX_MODE_LINEAR>(p); }
-__global__ void TextureFwdKernelCubeLinear4              (const TextureKernelParams p) { TextureFwdKernelTemplate<float4, 4, true,  TEX_MODE_LINEAR>(p); }
-__global__ void TextureFwdKernelCubeLinearMipmapNearest1 (const TextureKernelParams p) { TextureFwdKernelTemplate<float,  1, true,  TEX_MODE_LINEAR_MIPMAP_NEAREST>(p); }
-__global__ void TextureFwdKernelCubeLinearMipmapNearest2 (const TextureKernelParams p) { TextureFwdKernelTemplate<float2, 2, true,  TEX_MODE_LINEAR_MIPMAP_NEAREST>(p); }
-__global__ void TextureFwdKernelCubeLinearMipmapNearest4 (const TextureKernelParams p) { TextureFwdKernelTemplate<float4, 4, true,  TEX_MODE_LINEAR_MIPMAP_NEAREST>(p); }
-__global__ void TextureFwdKernelCubeLinearMipmapLinear1  (const TextureKernelParams p) { TextureFwdKernelTemplate<float,  1, true,  TEX_MODE_LINEAR_MIPMAP_LINEAR>(p); }
-__global__ void TextureFwdKernelCubeLinearMipmapLinear2  (const TextureKernelParams p) { TextureFwdKernelTemplate<float2, 2, true,  TEX_MODE_LINEAR_MIPMAP_LINEAR>(p); }
-__global__ void TextureFwdKernelCubeLinearMipmapLinear4  (const TextureKernelParams p) { TextureFwdKernelTemplate<float4, 4, true,  TEX_MODE_LINEAR_MIPMAP_LINEAR>(p); }
+__global__ void TextureFwdKernelNearest1                    (const TextureKernelParams p) { TextureFwdKernelTemplate<float,  1, false, false, TEX_MODE_NEAREST>(p); }
+__global__ void TextureFwdKernelNearest2                    (const TextureKernelParams p) { TextureFwdKernelTemplate<float2, 2, false, false, TEX_MODE_NEAREST>(p); }
+__global__ void TextureFwdKernelNearest4                    (const TextureKernelParams p) { TextureFwdKernelTemplate<float4, 4, false, false, TEX_MODE_NEAREST>(p); }
+__global__ void TextureFwdKernelLinear1                     (const TextureKernelParams p) { TextureFwdKernelTemplate<float,  1, false, false, TEX_MODE_LINEAR>(p); }
+__global__ void TextureFwdKernelLinear2                     (const TextureKernelParams p) { TextureFwdKernelTemplate<float2, 2, false, false, TEX_MODE_LINEAR>(p); }
+__global__ void TextureFwdKernelLinear4                     (const TextureKernelParams p) { TextureFwdKernelTemplate<float4, 4, false, false, TEX_MODE_LINEAR>(p); }
+__global__ void TextureFwdKernelLinearMipmapNearest1        (const TextureKernelParams p) { TextureFwdKernelTemplate<float,  1, false, false, TEX_MODE_LINEAR_MIPMAP_NEAREST>(p); }
+__global__ void TextureFwdKernelLinearMipmapNearest2        (const TextureKernelParams p) { TextureFwdKernelTemplate<float2, 2, false, false, TEX_MODE_LINEAR_MIPMAP_NEAREST>(p); }
+__global__ void TextureFwdKernelLinearMipmapNearest4        (const TextureKernelParams p) { TextureFwdKernelTemplate<float4, 4, false, false, TEX_MODE_LINEAR_MIPMAP_NEAREST>(p); }
+__global__ void TextureFwdKernelLinearMipmapLinear1         (const TextureKernelParams p) { TextureFwdKernelTemplate<float,  1, false, false, TEX_MODE_LINEAR_MIPMAP_LINEAR>(p); }
+__global__ void TextureFwdKernelLinearMipmapLinear2         (const TextureKernelParams p) { TextureFwdKernelTemplate<float2, 2, false, false, TEX_MODE_LINEAR_MIPMAP_LINEAR>(p); }
+__global__ void TextureFwdKernelLinearMipmapLinear4         (const TextureKernelParams p) { TextureFwdKernelTemplate<float4, 4, false, false, TEX_MODE_LINEAR_MIPMAP_LINEAR>(p); }
+__global__ void TextureFwdKernelCubeNearest1                (const TextureKernelParams p) { TextureFwdKernelTemplate<float,  1, true,  false, TEX_MODE_NEAREST>(p); }
+__global__ void TextureFwdKernelCubeNearest2                (const TextureKernelParams p) { TextureFwdKernelTemplate<float2, 2, true,  false, TEX_MODE_NEAREST>(p); }
+__global__ void TextureFwdKernelCubeNearest4                (const TextureKernelParams p) { TextureFwdKernelTemplate<float4, 4, true,  false, TEX_MODE_NEAREST>(p); }
+__global__ void TextureFwdKernelCubeLinear1                 (const TextureKernelParams p) { TextureFwdKernelTemplate<float,  1, true,  false, TEX_MODE_LINEAR>(p); }
+__global__ void TextureFwdKernelCubeLinear2                 (const TextureKernelParams p) { TextureFwdKernelTemplate<float2, 2, true,  false, TEX_MODE_LINEAR>(p); }
+__global__ void TextureFwdKernelCubeLinear4                 (const TextureKernelParams p) { TextureFwdKernelTemplate<float4, 4, true,  false, TEX_MODE_LINEAR>(p); }
+__global__ void TextureFwdKernelCubeLinearMipmapNearest1    (const TextureKernelParams p) { TextureFwdKernelTemplate<float,  1, true,  false, TEX_MODE_LINEAR_MIPMAP_NEAREST>(p); }
+__global__ void TextureFwdKernelCubeLinearMipmapNearest2    (const TextureKernelParams p) { TextureFwdKernelTemplate<float2, 2, true,  false, TEX_MODE_LINEAR_MIPMAP_NEAREST>(p); }
+__global__ void TextureFwdKernelCubeLinearMipmapNearest4    (const TextureKernelParams p) { TextureFwdKernelTemplate<float4, 4, true,  false, TEX_MODE_LINEAR_MIPMAP_NEAREST>(p); }
+__global__ void TextureFwdKernelCubeLinearMipmapLinear1     (const TextureKernelParams p) { TextureFwdKernelTemplate<float,  1, true,  false, TEX_MODE_LINEAR_MIPMAP_LINEAR>(p); }
+__global__ void TextureFwdKernelCubeLinearMipmapLinear2     (const TextureKernelParams p) { TextureFwdKernelTemplate<float2, 2, true,  false, TEX_MODE_LINEAR_MIPMAP_LINEAR>(p); }
+__global__ void TextureFwdKernelCubeLinearMipmapLinear4     (const TextureKernelParams p) { TextureFwdKernelTemplate<float4, 4, true,  false, TEX_MODE_LINEAR_MIPMAP_LINEAR>(p); }
+__global__ void TextureFwdKernelLinearMipmapNearestBO1      (const TextureKernelParams p) { TextureFwdKernelTemplate<float,  1, false, true,  TEX_MODE_LINEAR_MIPMAP_NEAREST>(p); }
+__global__ void TextureFwdKernelLinearMipmapNearestBO2      (const TextureKernelParams p) { TextureFwdKernelTemplate<float2, 2, false, true,  TEX_MODE_LINEAR_MIPMAP_NEAREST>(p); }
+__global__ void TextureFwdKernelLinearMipmapNearestBO4      (const TextureKernelParams p) { TextureFwdKernelTemplate<float4, 4, false, true,  TEX_MODE_LINEAR_MIPMAP_NEAREST>(p); }
+__global__ void TextureFwdKernelLinearMipmapLinearBO1       (const TextureKernelParams p) { TextureFwdKernelTemplate<float,  1, false, true,  TEX_MODE_LINEAR_MIPMAP_LINEAR>(p); }
+__global__ void TextureFwdKernelLinearMipmapLinearBO2       (const TextureKernelParams p) { TextureFwdKernelTemplate<float2, 2, false, true,  TEX_MODE_LINEAR_MIPMAP_LINEAR>(p); }
+__global__ void TextureFwdKernelLinearMipmapLinearBO4       (const TextureKernelParams p) { TextureFwdKernelTemplate<float4, 4, false, true,  TEX_MODE_LINEAR_MIPMAP_LINEAR>(p); }
+__global__ void TextureFwdKernelCubeLinearMipmapNearestBO1  (const TextureKernelParams p) { TextureFwdKernelTemplate<float,  1, true,  true,  TEX_MODE_LINEAR_MIPMAP_NEAREST>(p); }
+__global__ void TextureFwdKernelCubeLinearMipmapNearestBO2  (const TextureKernelParams p) { TextureFwdKernelTemplate<float2, 2, true,  true,  TEX_MODE_LINEAR_MIPMAP_NEAREST>(p); }
+__global__ void TextureFwdKernelCubeLinearMipmapNearestBO4  (const TextureKernelParams p) { TextureFwdKernelTemplate<float4, 4, true,  true,  TEX_MODE_LINEAR_MIPMAP_NEAREST>(p); }
+__global__ void TextureFwdKernelCubeLinearMipmapLinearBO1   (const TextureKernelParams p) { TextureFwdKernelTemplate<float,  1, true,  true,  TEX_MODE_LINEAR_MIPMAP_LINEAR>(p); }
+__global__ void TextureFwdKernelCubeLinearMipmapLinearBO2   (const TextureKernelParams p) { TextureFwdKernelTemplate<float2, 2, true,  true,  TEX_MODE_LINEAR_MIPMAP_LINEAR>(p); }
+__global__ void TextureFwdKernelCubeLinearMipmapLinearBO4   (const TextureKernelParams p) { TextureFwdKernelTemplate<float4, 4, true,  true,  TEX_MODE_LINEAR_MIPMAP_LINEAR>(p); }
 
 //------------------------------------------------------------------------
 // Gradient mip puller kernel.
@@ -856,7 +870,7 @@ __global__ void MipGradKernel4(const TextureKernelParams p) { MipGradKernelTempl
 //------------------------------------------------------------------------
 // Gradient kernel.
 
-template <bool CUBE_MODE, int FILTER_MODE>
+template <bool CUBE_MODE, bool BIAS_ONLY, int FILTER_MODE>
 static __forceinline__ __device__ void TextureGradKernelTemplate(const TextureKernelParams p)
 {
     // Temporary space for coalesced atomics.
@@ -899,9 +913,14 @@ static __forceinline__ __device__ void TextureGradKernelTemplate(const TextureKe
                 ((float3*)p.gradUV)[pidx] = make_float3(0.f, 0.f, 0.f);
             if (FILTER_MODE == TEX_MODE_LINEAR_MIPMAP_LINEAR)
             {
-                ((float2*)p.gradUVDA)[3 * pidx + 0] = make_float2(0.f, 0.f);
-                ((float2*)p.gradUVDA)[3 * pidx + 1] = make_float2(0.f, 0.f);
-                ((float2*)p.gradUVDA)[3 * pidx + 2] = make_float2(0.f, 0.f);
+                if (p.gradUVDA)
+                {
+                    ((float2*)p.gradUVDA)[3 * pidx + 0] = make_float2(0.f, 0.f);
+                    ((float2*)p.gradUVDA)[3 * pidx + 1] = make_float2(0.f, 0.f);
+                    ((float2*)p.gradUVDA)[3 * pidx + 2] = make_float2(0.f, 0.f);
+                }
+                if (p.gradMipLevelBias)
+                    p.gradMipLevelBias[pidx] = 0.f;
             }
         }
         else
@@ -909,7 +928,12 @@ static __forceinline__ __device__ void TextureGradKernelTemplate(const TextureKe
             if (FILTER_MODE != TEX_MODE_NEAREST)
                 ((float2*)p.gradUV)[pidx] = make_float2(0.f, 0.f);
             if (FILTER_MODE == TEX_MODE_LINEAR_MIPMAP_LINEAR)
-                ((float4*)p.gradUVDA)[pidx] = make_float4(0.f, 0.f, 0.f, 0.f);
+            {
+                if (p.gradUVDA)
+                    ((float4*)p.gradUVDA)[pidx] = make_float4(0.f, 0.f, 0.f, 0.f);
+                if (p.gradMipLevelBias)
+                    p.gradMipLevelBias[pidx] = 0.f;
+            }
         }
         return;
     }
@@ -944,7 +968,7 @@ static __forceinline__ __device__ void TextureGradKernelTemplate(const TextureKe
     float  flevel = 0.f; // Fractional level.
     int    level0 = 0;   // Discrete level 0.
     int    level1 = 0;   // Discrete level 1.
-    calculateMipLevel<CUBE_MODE, FILTER_MODE>(level0, level1, flevel, p, pidx, uv, &dw, &dfdv);
+    calculateMipLevel<CUBE_MODE, BIAS_ONLY, FILTER_MODE>(level0, level1, flevel, p, pidx, uv, &dw, &dfdv);
 
     // UV gradient accumulators.
     float gu = 0.f;
@@ -977,7 +1001,7 @@ static __forceinline__ __device__ void TextureGradKernelTemplate(const TextureKe
         {
             float dy = pDy[i];
             accumQuad(tw0 * dy, pOut0, level0, tc0, corner0, CA_TEMP);
-            
+
             float a00, a10, a01, a11;
             fetchQuad<float>(a00, a10, a01, a11, pIn0, tc0, corner0);
             float ad = (a11 + a00 - a10 - a01);
@@ -1037,7 +1061,7 @@ static __forceinline__ __device__ void TextureGradKernelTemplate(const TextureKe
             // Texture gradients for second level.
             float dy1 = flevel * dy;
             accumQuad(tw1 * dy1, pOut1, level1, tc1, corner1, CA_TEMP);
-    
+
             // UV gradients for second level.
             float b00, b10, b01, b11;
             fetchQuad<float>(b00, b10, b01, b11, pIn1, tc1, corner1);
@@ -1058,31 +1082,43 @@ static __forceinline__ __device__ void TextureGradKernelTemplate(const TextureKe
     else
         ((float2*)p.gradUV)[pidx] = make_float2(gu, gv);
 
-    // Final UV pixel differential gradients.
-    dw *= df; // dL/(d{s,y}/d{X,Y}) = df/(d{s,y}/d{X,Y}) * dL/df.
+    // Store mip level bias gradient.
+    if (p.gradMipLevelBias)
+        p.gradMipLevelBias[pidx] = df;
 
-    // Store them.
-    if (CUBE_MODE)
-    {        
-        // Remap from dL/(d{s,t}/s{X,Y}) to dL/(d{x,y,z}/d{X,Y}).
-        float3 g0, g1;
-        indexCubeMapGrad4(uv, dw, g0, g1); 
-        ((float2*)p.gradUVDA)[3 * pidx + 0] = make_float2(g0.x, g1.x);
-        ((float2*)p.gradUVDA)[3 * pidx + 1] = make_float2(g0.y, g1.y);
-        ((float2*)p.gradUVDA)[3 * pidx + 2] = make_float2(g0.z, g1.z);
+    // Store UV pixel differential gradients.
+    if (!BIAS_ONLY)
+    {
+        // Final gradients.
+        dw *= df; // dL/(d{s,y}/d{X,Y}) = df/(d{s,y}/d{X,Y}) * dL/df.
+
+        // Store them.
+        if (CUBE_MODE)
+        {
+            // Remap from dL/(d{s,t}/s{X,Y}) to dL/(d{x,y,z}/d{X,Y}).
+            float3 g0, g1;
+            indexCubeMapGrad4(uv, dw, g0, g1);
+            ((float2*)p.gradUVDA)[3 * pidx + 0] = make_float2(g0.x, g1.x);
+            ((float2*)p.gradUVDA)[3 * pidx + 1] = make_float2(g0.y, g1.y);
+            ((float2*)p.gradUVDA)[3 * pidx + 2] = make_float2(g0.z, g1.z);
+        }
+        else
+            ((float4*)p.gradUVDA)[pidx] = dw;
     }
-    else
-        ((float4*)p.gradUVDA)[pidx] = dw;
 }
 
 // Template specializations.
-__global__ void TextureGradKernelNearest                 (const TextureKernelParams p) { TextureGradKernelTemplate<false, TEX_MODE_NEAREST>(p); }
-__global__ void TextureGradKernelLinear                  (const TextureKernelParams p) { TextureGradKernelTemplate<false, TEX_MODE_LINEAR>(p); }
-__global__ void TextureGradKernelLinearMipmapNearest     (const TextureKernelParams p) { TextureGradKernelTemplate<false, TEX_MODE_LINEAR_MIPMAP_NEAREST>(p); }
-__global__ void TextureGradKernelLinearMipmapLinear      (const TextureKernelParams p) { TextureGradKernelTemplate<false, TEX_MODE_LINEAR_MIPMAP_LINEAR>(p); }
-__global__ void TextureGradKernelCubeNearest             (const TextureKernelParams p) { TextureGradKernelTemplate<true,  TEX_MODE_NEAREST>(p); }
-__global__ void TextureGradKernelCubeLinear              (const TextureKernelParams p) { TextureGradKernelTemplate<true,  TEX_MODE_LINEAR>(p); }
-__global__ void TextureGradKernelCubeLinearMipmapNearest (const TextureKernelParams p) { TextureGradKernelTemplate<true,  TEX_MODE_LINEAR_MIPMAP_NEAREST>(p); }
-__global__ void TextureGradKernelCubeLinearMipmapLinear  (const TextureKernelParams p) { TextureGradKernelTemplate<true,  TEX_MODE_LINEAR_MIPMAP_LINEAR>(p); }
+__global__ void TextureGradKernelNearest                    (const TextureKernelParams p) { TextureGradKernelTemplate<false, false, TEX_MODE_NEAREST>(p); }
+__global__ void TextureGradKernelLinear                     (const TextureKernelParams p) { TextureGradKernelTemplate<false, false, TEX_MODE_LINEAR>(p); }
+__global__ void TextureGradKernelLinearMipmapNearest        (const TextureKernelParams p) { TextureGradKernelTemplate<false, false, TEX_MODE_LINEAR_MIPMAP_NEAREST>(p); }
+__global__ void TextureGradKernelLinearMipmapLinear         (const TextureKernelParams p) { TextureGradKernelTemplate<false, false, TEX_MODE_LINEAR_MIPMAP_LINEAR>(p); }
+__global__ void TextureGradKernelCubeNearest                (const TextureKernelParams p) { TextureGradKernelTemplate<true,  false, TEX_MODE_NEAREST>(p); }
+__global__ void TextureGradKernelCubeLinear                 (const TextureKernelParams p) { TextureGradKernelTemplate<true,  false, TEX_MODE_LINEAR>(p); }
+__global__ void TextureGradKernelCubeLinearMipmapNearest    (const TextureKernelParams p) { TextureGradKernelTemplate<true,  false, TEX_MODE_LINEAR_MIPMAP_NEAREST>(p); }
+__global__ void TextureGradKernelCubeLinearMipmapLinear     (const TextureKernelParams p) { TextureGradKernelTemplate<true,  false, TEX_MODE_LINEAR_MIPMAP_LINEAR>(p); }
+__global__ void TextureGradKernelLinearMipmapNearestBO      (const TextureKernelParams p) { TextureGradKernelTemplate<false, true,  TEX_MODE_LINEAR_MIPMAP_NEAREST>(p); }
+__global__ void TextureGradKernelLinearMipmapLinearBO       (const TextureKernelParams p) { TextureGradKernelTemplate<false, true,  TEX_MODE_LINEAR_MIPMAP_LINEAR>(p); }
+__global__ void TextureGradKernelCubeLinearMipmapNearestBO  (const TextureKernelParams p) { TextureGradKernelTemplate<true,  true,  TEX_MODE_LINEAR_MIPMAP_NEAREST>(p); }
+__global__ void TextureGradKernelCubeLinearMipmapLinearBO   (const TextureKernelParams p) { TextureGradKernelTemplate<true,  true,  TEX_MODE_LINEAR_MIPMAP_LINEAR>(p); }
 
 //------------------------------------------------------------------------

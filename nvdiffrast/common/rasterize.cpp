@@ -76,12 +76,12 @@ static void constructGLProgram(NVDR_CTX_ARGS, GLuint* pProgram, GLuint glVertexS
 //------------------------------------------------------------------------
 // Shared C++ functions.
 
-void rasterizeInitGLContext(NVDR_CTX_ARGS, RasterizeGLState& s)
+void rasterizeInitGLContext(NVDR_CTX_ARGS, RasterizeGLState& s, int cudaDeviceIdx)
 {
     // Create GL context and set it current.
-    s.glctx = createGLContext();
+    s.glctx = createGLContext(cudaDeviceIdx);
     setGLContext(s.glctx);
- 
+
     // Version check.
     GLint vMajor = 0;
     GLint vMinor = 0;
@@ -90,7 +90,7 @@ void rasterizeInitGLContext(NVDR_CTX_ARGS, RasterizeGLState& s)
     glGetError(); // Clear possible GL_INVALID_ENUM error in version query.
     LOG(INFO) << "OpenGL version reported as " << vMajor << "." << vMinor;
     NVDR_CHECK((vMajor == 4 && vMinor >= 4) || vMajor > 4, "OpenGL 4.4 or later is required");
-    
+
     // Number of output buffers.
     int num_outputs = s.enableDB ? 2 : 1;
 
@@ -319,7 +319,7 @@ void rasterizeResizeBuffers(NVDR_CTX_ARGS, RasterizeGLState& s, int posCount, in
         s.width  = ROUND_UP(s.width, 32);
         s.height = ROUND_UP(s.height, 32);
         LOG(INFO) << "Increasing frame buffer size to (width, height, depth) = (" << s.width << ", " << s.height << ", " << s.depth << ")";
-        
+
         // Allocate color buffers.
         for (int i=0; i < num_outputs; i++)
         {

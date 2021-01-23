@@ -83,7 +83,7 @@ struct RasterizeGLState
 //------------------------------------------------------------------------
 // Shared C++ code prototypes.
 
-void rasterizeInitGLContext(NVDR_CTX_ARGS, RasterizeGLState& s);
+void rasterizeInitGLContext(NVDR_CTX_ARGS, RasterizeGLState& s, int cudaDeviceIdx);
 void rasterizeResizeBuffers(NVDR_CTX_ARGS, RasterizeGLState& s, int posCount, int triCount, int width, int height, int depth);
 void rasterizeRender(NVDR_CTX_ARGS, RasterizeGLState& s, cudaStream_t stream, const float* posPtr, int posCount, int vtxPerInstance, const int32_t* triPtr, int triCount, const int32_t* rangesPtr, int width, int height, int depth);
 void rasterizeCopyResults(NVDR_CTX_ARGS, RasterizeGLState& s, cudaStream_t stream, float** outputPtr, int width, int height, int depth);

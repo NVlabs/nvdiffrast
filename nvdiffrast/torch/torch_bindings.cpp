@@ -13,9 +13,10 @@
 //------------------------------------------------------------------------
 // Op prototypes. Return type macros for readability.
 
-#define OP_RETURN_T   torch::Tensor
-#define OP_RETURN_TT  std::tuple<torch::Tensor, torch::Tensor>
-#define OP_RETURN_TTT std::tuple<torch::Tensor, torch::Tensor, torch::Tensor>
+#define OP_RETURN_T     torch::Tensor
+#define OP_RETURN_TT    std::tuple<torch::Tensor, torch::Tensor>
+#define OP_RETURN_TTT   std::tuple<torch::Tensor, torch::Tensor, torch::Tensor>
+#define OP_RETURN_TTTT  std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
 
 OP_RETURN_TT        rasterize_fwd                       (RasterizeGLStateWrapper& stateWrapper, torch::Tensor pos, torch::Tensor tri, std::tuple<int, int> resolution, torch::Tensor ranges);
 OP_RETURN_T         rasterize_grad                      (torch::Tensor pos, torch::Tensor tri, torch::Tensor out, torch::Tensor dy);
@@ -26,11 +27,11 @@ OP_RETURN_TT        interpolate_grad                    (torch::Tensor attr, tor
 OP_RETURN_TTT       interpolate_grad_da                 (torch::Tensor attr, torch::Tensor rast, torch::Tensor tri, torch::Tensor dy, torch::Tensor rast_db, torch::Tensor dda, bool diff_attrs_all, std::vector<int>& diff_attrs_vec);
 TextureMipWrapper   texture_construct_mip               (torch::Tensor tex, int max_mip_level, bool cube_mode);
 OP_RETURN_T         texture_fwd                         (torch::Tensor tex, torch::Tensor uv, int filter_mode, int boundary_mode);
-OP_RETURN_T         texture_fwd_mip                     (torch::Tensor tex, torch::Tensor uv, torch::Tensor uv_da, TextureMipWrapper mip, int filter_mode, int boundary_mode);
+OP_RETURN_T         texture_fwd_mip                     (torch::Tensor tex, torch::Tensor uv, torch::Tensor uv_da, torch::Tensor mip_level_bias, TextureMipWrapper mip, int filter_mode, int boundary_mode);
 OP_RETURN_T         texture_grad_nearest                (torch::Tensor tex, torch::Tensor uv, torch::Tensor dy, int filter_mode, int boundary_mode);
 OP_RETURN_TT        texture_grad_linear                 (torch::Tensor tex, torch::Tensor uv, torch::Tensor dy, int filter_mode, int boundary_mode);
-OP_RETURN_TT        texture_grad_linear_mipmap_nearest  (torch::Tensor tex, torch::Tensor uv, torch::Tensor dy, torch::Tensor uv_da, TextureMipWrapper mip, int filter_mode, int boundary_mode);
-OP_RETURN_TTT       texture_grad_linear_mipmap_linear   (torch::Tensor tex, torch::Tensor uv, torch::Tensor dy, torch::Tensor uv_da, TextureMipWrapper mip, int filter_mode, int boundary_mode);
+OP_RETURN_TT        texture_grad_linear_mipmap_nearest  (torch::Tensor tex, torch::Tensor uv, torch::Tensor dy, torch::Tensor uv_da, torch::Tensor mip_level_bias, TextureMipWrapper mip, int filter_mode, int boundary_mode);
+OP_RETURN_TTTT      texture_grad_linear_mipmap_linear   (torch::Tensor tex, torch::Tensor uv, torch::Tensor dy, torch::Tensor uv_da, torch::Tensor mip_level_bias, TextureMipWrapper mip, int filter_mode, int boundary_mode);
 TopologyHashWrapper antialias_construct_topology_hash   (torch::Tensor tri);
 OP_RETURN_TT        antialias_fwd                       (torch::Tensor color, torch::Tensor rast, torch::Tensor pos, torch::Tensor tri, TopologyHashWrapper topology_hash);
 OP_RETURN_TT        antialias_grad                      (torch::Tensor color, torch::Tensor rast, torch::Tensor pos, torch::Tensor tri, torch::Tensor dy, torch::Tensor work_buffer);
@@ -39,7 +40,7 @@ OP_RETURN_TT        antialias_grad                      (torch::Tensor color, to
 
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
     // State classes.
-    pybind11::class_<RasterizeGLStateWrapper>(m, "RasterizeGLStateWrapper").def(pybind11::init<bool, bool>())
+    pybind11::class_<RasterizeGLStateWrapper>(m, "RasterizeGLStateWrapper").def(pybind11::init<bool, bool, int>())
         .def("set_context",     &RasterizeGLStateWrapper::setContext)
         .def("release_context", &RasterizeGLStateWrapper::releaseContext);
     pybind11::class_<TextureMipWrapper>(m, "TextureMipWrapper");
@@ -58,8 +59,8 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
     m.def("interpolate_grad",                   &interpolate_grad,                      "interpolate gradient op with attribute derivatives");
     m.def("interpolate_grad_da",                &interpolate_grad_da,                   "interpolate gradient op without attribute derivatives");
     m.def("texture_construct_mip",              &texture_construct_mip,                 "texture mipmap construction");
-    m.def("texture_fwd",                        &texture_fwd,                           "texture forward op with mipmapping and texcoord derivatives");
-    m.def("texture_fwd_mip",                    &texture_fwd_mip,                       "texture forward op without mipmapping and texcoord derivatives");
+    m.def("texture_fwd",                        &texture_fwd,                           "texture forward op without mipmapping");
+    m.def("texture_fwd_mip",                    &texture_fwd_mip,                       "texture forward op with mipmapping");
     m.def("texture_grad_nearest",               &texture_grad_nearest,                  "texture gradient op in nearest mode");
     m.def("texture_grad_linear",                &texture_grad_linear,                   "texture gradient op in linear mode");
     m.def("texture_grad_linear_mipmap_nearest", &texture_grad_linear_mipmap_nearest,    "texture gradient op in linear-mipmap-nearest mode");

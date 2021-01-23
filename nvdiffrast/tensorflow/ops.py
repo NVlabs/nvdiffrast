@@ -19,7 +19,7 @@ from . import plugin_loader
 def _get_gl_opts():
     libs = {
         'posix': ['GL', 'GLEW'],
-        'nt':    ['gdi32', 'glew32s', 'opengl32', 'user32'], 
+        'nt':    ['gdi32', 'glew32s', 'opengl32', 'user32', 'setgpu'],
     }
     return ['-l' + x for x in libs[os.name]]
 

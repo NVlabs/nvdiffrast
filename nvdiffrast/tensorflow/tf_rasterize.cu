@@ -12,11 +12,11 @@
 struct RasterizeFwdOp : public OpKernel
 {
     RasterizeGLState        m_glState;              // OpenGL-related persistent state.
-    int                     m_tri_const;            // 1 if triangle array is known to be constant.    
+    int                     m_tri_const;            // 1 if triangle array is known to be constant.
 
     RasterizeFwdOp(OpKernelConstruction* ctx):
         OpKernel(ctx)
-    {        
+    {
         memset(&m_glState, 0, sizeof(RasterizeGLState));
         OP_REQUIRES_OK(ctx, ctx->GetAttr("enable_db", &m_glState.enableDB));
         OP_REQUIRES_OK(ctx, ctx->GetAttr("tri_const", &m_tri_const));
@@ -48,7 +48,7 @@ struct RasterizeFwdOp : public OpKernel
             OP_REQUIRES(ctx, pos.dims() == 2 && pos.dim_size(0) > 0 && pos.dim_size(1) == 4, errors::InvalidArgument("range mode - pos must have shape [>0, 4]"));
             OP_REQUIRES(ctx, tri.dims() == 2 && tri.dim_size(0) > 0 && tri.dim_size(1) == 3, errors::InvalidArgument("tri must have shape [>0, 3]"));
             OP_REQUIRES(ctx, resolution.dims() == 1 && resolution.dim_size(0) == 2, errors::InvalidArgument("resolution must have shape [2]"));
-            OP_REQUIRES(ctx, ranges.dims() == 2 && ranges.dim_size(0) > 0 && ranges.dim_size(1) == 2, errors::InvalidArgument("range mode - ranges must have shape [>0, 2]"));            
+            OP_REQUIRES(ctx, ranges.dims() == 2 && ranges.dim_size(0) > 0 && ranges.dim_size(1) == 2, errors::InvalidArgument("range mode - ranges must have shape [>0, 2]"));
         }
 
         // Get output shape.
@@ -65,12 +65,16 @@ struct RasterizeFwdOp : public OpKernel
         // Init context and GL?
         bool initCtx = !m_glState.glFBO;
         if (initCtx)
-            rasterizeInitGLContext(ctx, m_glState); // In common/rasterize.inl
+        {
+            const DeviceBase::GpuDeviceInfo* g = ctx->device()->tensorflow_gpu_device_info();
+            int cudaDeviceIdx = g ? g->gpu_id : -1;
+            rasterizeInitGLContext(ctx, m_glState, cudaDeviceIdx); // In common/rasterize.cpp
+        }
         else
             setGLContext(m_glState.glctx); // (Re-)Activate GL context.
 
         // Resize all buffers.
-        rasterizeResizeBuffers(ctx, m_glState, posCount, triCount, width, height, depth); // In common/rasterize.inl
+        rasterizeResizeBuffers(ctx, m_glState, posCount, triCount, width, height, depth); // In common/rasterize.cpp
 
         // Newly created GL objects sometimes don't map properly to CUDA until after first context swap. Workaround.
         if (initCtx)
@@ -79,7 +83,7 @@ struct RasterizeFwdOp : public OpKernel
             releaseGLContext();
             setGLContext(m_glState.glctx);
         }
-    
+
         // Copy input data to GL and render.
         const float* posPtr = pos.flat<float>().data();
         const int32_t* rangesPtr = instance_mode ? 0 : ranges.flat<int32_t>().data(); // This is in CPU memory.
@@ -178,7 +182,7 @@ struct RasterizeGradOp : public OpKernel
         p.out = out.flat<float>().data();
         p.dy  = dy.flat<float>().data();
         p.ddb = ENABLE_DB ? ddb.flat<float>().data() : 0;
-        
+
         // Set up pixel position to clip space x, y transform.
         p.xs = 2.f / (float)p.width;
         p.xo = 1.f / (float)p.width - 1.f;

@@ -15,7 +15,7 @@ class RasterizeGLState;
 class RasterizeGLStateWrapper
 {
 public:
-    RasterizeGLStateWrapper     (bool enableDB, bool automatic);
+    RasterizeGLStateWrapper     (bool enableDB, bool automatic, int cudaDeviceIdx);
     ~RasterizeGLStateWrapper    (void);
 
     void setContext             (void);
@@ -23,6 +23,7 @@ public:
 
     RasterizeGLState*           pState;
     bool                        automatic;
+    int                         cudaDeviceIdx;
 };
 
 //------------------------------------------------------------------------

@@ -24,6 +24,7 @@ void AntialiasGradKernel            (const AntialiasKernelParams p);
 
 TopologyHashWrapper antialias_construct_topology_hash(torch::Tensor tri)
 {
+    const at::cuda::OptionalCUDAGuard device_guard(device_of(tri));
     cudaStream_t stream = at::cuda::getCurrentCUDAStream();
     AntialiasKernelParams p = {}; // Initialize all fields to zero.
 
@@ -66,6 +67,7 @@ TopologyHashWrapper antialias_construct_topology_hash(torch::Tensor tri)
 
 std::tuple<torch::Tensor, torch::Tensor> antialias_fwd(torch::Tensor color, torch::Tensor rast, torch::Tensor pos, torch::Tensor tri, TopologyHashWrapper topology_hash_wrap)
 {
+    const at::cuda::OptionalCUDAGuard device_guard(device_of(color));
     cudaStream_t stream = at::cuda::getCurrentCUDAStream();
     AntialiasKernelParams p = {}; // Initialize all fields to zero.
     p.instance_mode = (pos.sizes().size() > 2) ? 1 : 0;
@@ -112,10 +114,10 @@ std::tuple<torch::Tensor, torch::Tensor> antialias_fwd(torch::Tensor color, torc
     p.xh = .5f * (float)p.width;
     p.yh = .5f * (float)p.height;
     p.allocTriangles = topology_hash.size(0) / (4 * AA_HASH_ELEMENTS_PER_TRIANGLE);
-   
+
     // Allocate output tensors.
     torch::Tensor out = color.detach().clone(); // Use color as base.
-    torch::TensorOptions opts = torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCUDA);    
+    torch::TensorOptions opts = torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCUDA);
     torch::Tensor work_buffer = torch::empty({p.n * p.width * p.height * 8 + 4}, opts); // 8 int for a maximum of two work items per pixel.
     p.output = out.data_ptr<float>();
     p.workBuffer = (int4*)(work_buffer.data_ptr<float>());
@@ -153,6 +155,7 @@ std::tuple<torch::Tensor, torch::Tensor> antialias_fwd(torch::Tensor color, torc
 
 std::tuple<torch::Tensor, torch::Tensor> antialias_grad(torch::Tensor color, torch::Tensor rast, torch::Tensor pos, torch::Tensor tri, torch::Tensor dy, torch::Tensor work_buffer)
 {
+    const at::cuda::OptionalCUDAGuard device_guard(device_of(color));
     cudaStream_t stream = at::cuda::getCurrentCUDAStream();
     AntialiasKernelParams p = {}; // Initialize all fields to zero.
     p.instance_mode = (pos.sizes().size() > 2) ? 1 : 0;

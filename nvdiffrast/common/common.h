@@ -185,6 +185,8 @@ template<class T> static __device__ __forceinline__ void swap(T& a, T& b)       
 //------------------------------------------------------------------------
 // Coalesced atomics. These are all done via macros.
 
+#if __CUDA_ARCH__ >= 700 // Warp match instruction __match_any_sync() is only available on compute capability 7.x and higher
+
 #define CA_TEMP       _ca_temp
 #define CA_TEMP_PARAM float* CA_TEMP
 #define CA_DECLARE_TEMP(threads_per_block) \
@@ -227,6 +229,25 @@ template<class T> static __device__ __forceinline__ void swap(T& a, T& b)       
         CA_SET_GROUP((idx) ^ ((level) << 27));      \
         caAtomicAdd((ptr)+(idx), (value));          \
     } while(0)
+
+//------------------------------------------------------------------------
+// Disable atomic coalescing for compute capability lower than 7.x
+
+#else // __CUDA_ARCH__ >= 700
+#define CA_TEMP _ca_temp
+#define CA_TEMP_PARAM float CA_TEMP
+#define CA_DECLARE_TEMP(threads_per_block) CA_TEMP_PARAM
+#define CA_SET_GROUP_MASK(group, thread_mask)
+#define CA_SET_GROUP(group)
+#define caAtomicAdd(ptr, value) atomicAdd((ptr), (value))
+#define caAtomicAdd3_xyw(ptr, x, y, w)  \
+    do {                                \
+        atomicAdd((ptr), (x));          \
+        atomicAdd((ptr)+1, (y));        \
+        atomicAdd((ptr)+3, (w));        \
+    } while(0)
+#define caAtomicAddTexture(ptr, level, idx, value) atomicAdd((ptr)+(idx), (value))
+#endif // __CUDA_ARCH__ >= 700
 
 //------------------------------------------------------------------------
 #endif // __CUDACC__

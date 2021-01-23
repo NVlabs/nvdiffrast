@@ -40,7 +40,8 @@ struct TextureKernelParams
 {
     const float*    tex;                            // Incoming texture buffer.
     const float*    uv;                             // Incoming texcoord buffer.
-    const float*    uvDA;                           // Incoming uv pixel diffs. NULL if mips disabled.
+    const float*    uvDA;                           // Incoming uv pixel diffs or NULL.
+    const float*    mipLevelBias;                   // Incoming mip level bias or NULL.
     const float*    dy;                             // Incoming output gradient.
     float*          mip;                            // Mip data buffer.
     float*          out;                            // Outgoing texture data.
@@ -48,7 +49,8 @@ struct TextureKernelParams
     float*          gradTexMip;                     // Temporary texture gradients for mip levels > 0.
     float*          gradUV;                         // Outgoing texcoord gradient.
     float*          gradUVDA;                       // Outgoing texcoord pixel differential gradient.
-    int             enableMip;                      // If true, we have uv_da input and mip output tensor.
+    float*          gradMipLevelBias;               // Outgoing mip level bias gradient.
+    int             enableMip;                      // If true, we have uv_da and/or mip_level_bias input(s), and a mip tensor.
     int             filterMode;                     // One of the TEX_MODE_ constants.
     int             boundaryMode;                   // One of the TEX_BOUNDARY_MODE_ contants.
     int             texConst;                       // If true, texture is known to be constant.

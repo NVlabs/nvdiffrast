@@ -45,9 +45,9 @@ def _get_plugin():
 
     # Linker options.
     if os.name == 'posix':
-        ldflags = ['-lGL', '-lGLEW']
+        ldflags = ['-lGL', '-lGLEW', '-lEGL']
     elif os.name == 'nt':
-        libs = ['gdi32', 'glew32s', 'opengl32', 'user32']
+        libs = ['gdi32', 'glew32s', 'opengl32', 'user32', 'setgpu']
         ldflags = ['/LIBPATH:' + lib_dir] + ['/DEFAULTLIB:' + x for x in libs]
 
     # List of source files.
@@ -103,9 +103,9 @@ def set_log_level(level):
     '''Set log level.
 
     Log levels follow the convention on the C++ side of Torch:
-      0 = Info, 
-      1 = Warning, 
-      2 = Error, 
+      0 = Info,
+      1 = Warning,
+      2 = Error,
       3 = Fatal.
     The default log level is 1.
 
@@ -121,7 +121,7 @@ def set_log_level(level):
 #----------------------------------------------------------------------------
 
 class RasterizeGLContext:
-    def __init__(self, output_db=True, mode='automatic'):
+    def __init__(self, output_db=True, mode='automatic', device=None):
         '''Create a new OpenGL rasterizer context.
 
         Creating an OpenGL context is a slow operation so you should reuse the same
@@ -131,7 +131,10 @@ class RasterizeGLContext:
         Args:
           output_db (bool): Compute and output image-space derivates of barycentrics.
           mode: OpenGL context handling mode. Valid values are 'manual' and 'automatic'.
-
+          device (Optional): Cuda device on which the context is created. Type can be
+                             `torch.device`, string (e.g., `'cuda:1'`), or int. If not
+                             specified, context will be created on currently active Cuda
+                             device.
         Returns:
           The newly created OpenGL rasterizer context.
         '''
@@ -139,11 +142,16 @@ class RasterizeGLContext:
         assert mode in ['automatic', 'manual']
         self.output_db = output_db
         self.mode = mode
-        self.cpp_wrapper = _get_plugin().RasterizeGLStateWrapper(output_db, mode == 'automatic')
+        if device is None:
+            cuda_device_idx = torch.cuda.current_device()
+        else:
+            with torch.cuda.device(device):
+                cuda_device_idx = torch.cuda.current_device()
+        self.cpp_wrapper = _get_plugin().RasterizeGLStateWrapper(output_db, mode == 'automatic', cuda_device_idx)
 
     def set_context(self):
         '''Set (activate) OpenGL context in the current CPU thread.
-           Only available if context was created in manual mode.   
+           Only available if context was created in manual mode.
         '''
         assert self.mode == 'manual'
         self.cpp_wrapper.set_context()
@@ -316,22 +324,26 @@ def interpolate(attr, rast, tri, rast_db=None, diff_attrs=None):
 # Linear-mipmap-linear and linear-mipmap-nearest: Mipmaps enabled.
 class _texture_func_mip(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, filter_mode, tex, uv, uv_da, mip, filter_mode_enum, boundary_mode_enum):
-        out = _get_plugin().texture_fwd_mip(tex, uv, uv_da, mip, filter_mode_enum, boundary_mode_enum)
-        ctx.save_for_backward(tex, uv, uv_da)
+    def forward(ctx, filter_mode, tex, uv, uv_da, mip_level_bias, mip, filter_mode_enum, boundary_mode_enum):
+        if uv_da is None:
+            uv_da = torch.tensor([])
+        if mip_level_bias is None:
+            mip_level_bias = torch.tensor([])
+        out = _get_plugin().texture_fwd_mip(tex, uv, uv_da, mip_level_bias, mip, filter_mode_enum, boundary_mode_enum)
+        ctx.save_for_backward(tex, uv, uv_da, mip_level_bias)
         ctx.saved_misc = filter_mode, mip, filter_mode_enum, boundary_mode_enum
         return out
 
     @staticmethod
     def backward(ctx, dy):
-        tex, uv, uv_da = ctx.saved_variables
+        tex, uv, uv_da, mip_level_bias = ctx.saved_variables
         filter_mode, mip, filter_mode_enum, boundary_mode_enum = ctx.saved_misc
         if filter_mode == 'linear-mipmap-linear':
-            g_tex, g_uv, g_uv_da = _get_plugin().texture_grad_linear_mipmap_linear(tex, uv, dy, uv_da, mip, filter_mode_enum, boundary_mode_enum)
-            return None, g_tex, g_uv, g_uv_da, None, None, None
+            g_tex, g_uv, g_uv_da, g_mip_level_bias = _get_plugin().texture_grad_linear_mipmap_linear(tex, uv, dy, uv_da, mip_level_bias, mip, filter_mode_enum, boundary_mode_enum)
+            return None, g_tex, g_uv, g_uv_da, g_mip_level_bias, None, None, None
         else: # linear-mipmap-nearest
-            g_tex, g_uv = _get_plugin().texture_grad_linear_mipmap_nearest(tex, uv, dy, uv_da, mip, filter_mode_enum, boundary_mode_enum)
-            return None, g_tex, g_uv, None, None, None, None
+            g_tex, g_uv = _get_plugin().texture_grad_linear_mipmap_nearest(tex, uv, dy, uv_da, mip_level_bias, mip, filter_mode_enum, boundary_mode_enum)
+            return None, g_tex, g_uv, None, None, None, None, None
 
 # Linear and nearest: Mipmaps disabled.
 class _texture_func(torch.autograd.Function):
@@ -354,7 +366,7 @@ class _texture_func(torch.autograd.Function):
             return None, g_tex, None, None, None
 
 # Op wrapper.
-def texture(tex, uv, uv_da=None, mip=None, filter_mode='auto', boundary_mode='wrap', max_mip_level=None):
+def texture(tex, uv, uv_da=None, mip_level_bias=None, mip=None, filter_mode='auto', boundary_mode='wrap', max_mip_level=None):
     """Perform texture sampling.
 
     All input tensors must be contiguous and reside in GPU memory. The output tensor
@@ -364,22 +376,24 @@ def texture(tex, uv, uv_da=None, mip=None, filter_mode='auto', boundary_mode='wr
         tex: Texture tensor with dtype `torch.float32`. For 2D textures, must have shape
              [minibatch_size, tex_height, tex_width, tex_channels]. For cube map textures,
              must have shape [minibatch_size, 6, tex_height, tex_width, tex_channels] where
-             tex_width and tex_height are equal. Note that `boundary_mode` must also be set 
+             tex_width and tex_height are equal. Note that `boundary_mode` must also be set
              to 'cube' to enable cube map mode. Broadcasting is supported along the minibatch axis.
-        uv: Tensor containing per-pixel texture coordinates. When sampling a 2D texture, 
+        uv: Tensor containing per-pixel texture coordinates. When sampling a 2D texture,
             must have shape [minibatch_size, height, width, 2]. When sampling a cube map
             texture, must have shape [minibatch_size, height, width, 3].
         uv_da: (Optional) Tensor containing image-space derivatives of texture coordinates.
                Must have same shape as `uv` except for the last dimension that is to be twice
                as long.
+        mip_level_bias: (Optional) Per-pixel bias for mip level selection. If `uv_da` is omitted,
+                        determines mip level directly. Must have shape [minibatch_size, height, width].
         mip: (Optional) Preconstructed mipmap stack from a `texture_construct_mip()` call. If not
              specified, the mipmap stack is constructed internally and discarded afterwards.
-        filter_mode: Texture filtering mode to be used. Valid values are 'auto', 'nearest', 
+        filter_mode: Texture filtering mode to be used. Valid values are 'auto', 'nearest',
                      'linear', 'linear-mipmap-nearest', and 'linear-mipmap-linear'. Mode 'auto'
-                     selects 'linear' if `uv_da` is not specified, and 'linear-mipmap-linear'
-                     when `uv_da` is specified, these being the highest-quality modes possible
-                     depending on the availability of the image-space derivatives of the texture
-                     coordinates.
+                     selects 'linear' if neither `uv_da` or `mip_level_bias` is specified, and
+                     'linear-mipmap-linear' when at least one of them is specified, these being
+                     the highest-quality modes possible depending on the availability of the
+                     image-space derivatives of the texture coordinates or direct mip level information.
         boundary_mode: Valid values are 'wrap', 'clamp', 'zero', and 'cube'. If `tex` defines a
                        cube map, this must be set to 'cube'. The default mode 'wrap' takes fractional
                        part of texture coordinates. Mode 'clamp' clamps texture coordinates to the
@@ -395,7 +409,7 @@ def texture(tex, uv, uv_da=None, mip=None, filter_mode='auto', boundary_mode='wr
 
     # Default filter mode.
     if filter_mode == 'auto':
-        filter_mode = 'linear-mipmap-linear' if (uv_da is not None) else 'linear'
+        filter_mode = 'linear-mipmap-linear' if (uv_da is not None or mip_level_bias is not None) else 'linear'
 
     # Sanitize inputs.
     if max_mip_level is None:
@@ -407,7 +421,7 @@ def texture(tex, uv, uv_da=None, mip=None, filter_mode='auto', boundary_mode='wr
     # Check inputs.
     assert isinstance(tex, torch.Tensor) and isinstance(uv, torch.Tensor)
     if 'mipmap' in filter_mode:
-        assert isinstance(uv_da, torch.Tensor)
+        assert isinstance(uv_da, torch.Tensor) or isinstance(mip_level_bias, torch.Tensor)
 
     # If mipping disabled via max level=0, we may as well use simpler filtering internally.
     if max_mip_level == 0 and filter_mode in ['linear-mipmap-nearest', 'linear-mipmap-linear']:
@@ -430,10 +444,10 @@ def texture(tex, uv, uv_da=None, mip=None, filter_mode='auto', boundary_mode='wr
 
     # Choose stub.
     if filter_mode == 'linear-mipmap-linear' or filter_mode == 'linear-mipmap-nearest':
-        return _texture_func_mip.apply(filter_mode, tex, uv, uv_da, mip, filter_mode_enum, boundary_mode_enum)
+        return _texture_func_mip.apply(filter_mode, tex, uv, uv_da, mip_level_bias, mip, filter_mode_enum, boundary_mode_enum)
     else:
         return _texture_func.apply(filter_mode, tex, uv, filter_mode_enum, boundary_mode_enum)
-        
+
 # Mipmap precalculation for cases where the texture stays constant.
 def texture_construct_mip(tex, max_mip_level=None, cube_mode=False):
     """Construct a mipmap stack for a texture.

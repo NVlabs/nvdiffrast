@@ -21,13 +21,14 @@ void RasterizeGradKernelDb(const RasterizeGradParams p);
 //------------------------------------------------------------------------
 // Python GL state wrapper methods.
 
-RasterizeGLStateWrapper::RasterizeGLStateWrapper(bool enableDB, bool automatic_)
+RasterizeGLStateWrapper::RasterizeGLStateWrapper(bool enableDB, bool automatic_, int cudaDeviceIdx_)
 {
     pState = new RasterizeGLState();
     automatic = automatic_;
+    cudaDeviceIdx = cudaDeviceIdx_;
     memset(pState, 0, sizeof(RasterizeGLState));
     pState->enableDB = enableDB ? 1 : 0;
-    rasterizeInitGLContext(NVDR_CTX_PARAMS, *pState);
+    rasterizeInitGLContext(NVDR_CTX_PARAMS, *pState, cudaDeviceIdx_);
     releaseGLContext();
 }
 
@@ -52,6 +53,7 @@ void RasterizeGLStateWrapper::releaseContext(void)
 
 std::tuple<torch::Tensor, torch::Tensor> rasterize_fwd(RasterizeGLStateWrapper& stateWrapper, torch::Tensor pos, torch::Tensor tri, std::tuple<int, int> resolution, torch::Tensor ranges)
 {
+    const at::cuda::OptionalCUDAGuard device_guard(device_of(pos));
     cudaStream_t stream = at::cuda::getCurrentCUDAStream();
     RasterizeGLState& s = *stateWrapper.pState;
 
@@ -61,6 +63,9 @@ std::tuple<torch::Tensor, torch::Tensor> rasterize_fwd(RasterizeGLStateWrapper& 
     NVDR_CHECK_CONTIGUOUS(pos, tri, ranges);
     NVDR_CHECK_F32(pos);
     NVDR_CHECK_I32(tri, ranges);
+
+    // Check that GL context was created for the correct GPU.
+    NVDR_CHECK(pos.get_device() == stateWrapper.cudaDeviceIdx, "GL context must must reside on the same device as input tensors");
 
     // Determine number of outputs
     int num_outputs = s.enableDB ? 2 : 1;
@@ -101,7 +106,7 @@ std::tuple<torch::Tensor, torch::Tensor> rasterize_fwd(RasterizeGLStateWrapper& 
     rasterizeRender(NVDR_CTX_PARAMS, s, stream, posPtr, posCount, vtxPerInstance, triPtr, triCount, rangesPtr, width, height, depth);
 
     // Allocate output tensors.
-    torch::TensorOptions opts = torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCUDA);    
+    torch::TensorOptions opts = torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCUDA);
     torch::Tensor out = torch::empty({depth, height, width, 4}, opts);
     torch::Tensor out_db = torch::empty({depth, height, width, s.enableDB ? 4 : 0}, opts);
     float* outputPtr[2];
@@ -123,6 +128,7 @@ std::tuple<torch::Tensor, torch::Tensor> rasterize_fwd(RasterizeGLStateWrapper& 
 
 torch::Tensor rasterize_grad_db(torch::Tensor pos, torch::Tensor tri, torch::Tensor out, torch::Tensor dy, torch::Tensor ddb)
 {
+    const at::cuda::OptionalCUDAGuard device_guard(device_of(pos));
     cudaStream_t stream = at::cuda::getCurrentCUDAStream();
     RasterizeGradParams p;
     bool enable_db = ddb.defined();
@@ -178,7 +184,7 @@ torch::Tensor rasterize_grad_db(torch::Tensor pos, torch::Tensor tri, torch::Ten
     p.out = out.data_ptr<float>();
     p.dy  = dy_.data_ptr<float>();
     p.ddb = enable_db ? ddb_.data_ptr<float>() : NULL;
-    
+
     // Set up pixel position to clip space x, y transform.
     p.xs = 2.f / (float)p.width;
     p.xo = 1.f / (float)p.width - 1.f;
@@ -209,7 +215,7 @@ torch::Tensor rasterize_grad_db(torch::Tensor pos, torch::Tensor tri, torch::Ten
 
 // Version without derivatives.
 torch::Tensor rasterize_grad(torch::Tensor pos, torch::Tensor tri, torch::Tensor out, torch::Tensor dy)
-{ 
+{
     torch::Tensor empty_tensor;
     return rasterize_grad_db(pos, tri, out, dy, empty_tensor);
 }

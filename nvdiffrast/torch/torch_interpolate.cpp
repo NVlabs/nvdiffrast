@@ -41,6 +41,7 @@ static void set_diff_attrs(InterpolateKernelParams& p, bool diff_attrs_all, std:
 
 std::tuple<torch::Tensor, torch::Tensor> interpolate_fwd_da(torch::Tensor attr, torch::Tensor rast, torch::Tensor tri, torch::Tensor rast_db, bool diff_attrs_all, std::vector<int>& diff_attrs_vec)
 {
+    const at::cuda::OptionalCUDAGuard device_guard(device_of(attr));
     cudaStream_t stream = at::cuda::getCurrentCUDAStream();
     InterpolateKernelParams p = {}; // Initialize all fields to zero.
     bool enable_da = (rast_db.defined()) && (diff_attrs_all || !diff_attrs_vec.empty());
@@ -86,6 +87,8 @@ std::tuple<torch::Tensor, torch::Tensor> interpolate_fwd_da(torch::Tensor attr, 
     // Set attribute pixel differential info if enabled, otherwise leave as zero.
     if (enable_da)
         set_diff_attrs(p, diff_attrs_all, diff_attrs_vec);
+    else
+        p.numDiffAttr = 0;
 
     // Get input pointers.
     p.attr = attr.data_ptr<float>();
@@ -95,7 +98,7 @@ std::tuple<torch::Tensor, torch::Tensor> interpolate_fwd_da(torch::Tensor attr, 
     p.attrBC = (p.instance_mode && attr.size(0) == 1) ? 1 : 0;
 
     // Allocate output tensors.
-    torch::TensorOptions opts = torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCUDA);    
+    torch::TensorOptions opts = torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCUDA);
     torch::Tensor out = torch::empty({p.depth, p.height, p.width, p.numAttr}, opts);
     torch::Tensor out_da = torch::empty({p.depth, p.height, p.width, p.numDiffAttr * 2}, opts);
 
@@ -133,6 +136,7 @@ std::tuple<torch::Tensor, torch::Tensor> interpolate_fwd(torch::Tensor attr, tor
 
 std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> interpolate_grad_da(torch::Tensor attr, torch::Tensor rast, torch::Tensor tri, torch::Tensor dy, torch::Tensor rast_db, torch::Tensor dda, bool diff_attrs_all, std::vector<int>& diff_attrs_vec)
 {
+    const at::cuda::OptionalCUDAGuard device_guard(device_of(attr));
     cudaStream_t stream = at::cuda::getCurrentCUDAStream();
     InterpolateKernelParams p = {}; // Initialize all fields to zero.
     bool enable_da = (rast_db.defined()) && (diff_attrs_all || !diff_attrs_vec.empty());
@@ -190,6 +194,8 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> interpolate_grad_da(torc
     // Set attribute pixel differential info if enabled, otherwise leave as zero.
     if (enable_da)
         set_diff_attrs(p, diff_attrs_all, diff_attrs_vec);
+    else
+        p.numDiffAttr = 0;
 
     // Get input pointers.
     p.attr = attr.data_ptr<float>();
@@ -201,7 +207,7 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> interpolate_grad_da(torc
     p.attrBC = (p.instance_mode && attr_depth < p.depth) ? 1 : 0;
 
     // Allocate output tensors.
-    torch::TensorOptions opts = torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCUDA);    
+    torch::TensorOptions opts = torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCUDA);
     torch::Tensor gradAttr = torch::zeros_like(attr);
     torch::Tensor gradRaster = torch::empty_like(rast);
     torch::Tensor gradRasterDB;

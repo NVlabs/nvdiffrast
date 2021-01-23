@@ -36,6 +36,7 @@ using namespace tensorflow::shape_inference;
 #include <torch/extension.h>
 #include <ATen/cuda/CUDAContext.h>
 #include <ATen/cuda/CUDAUtils.h>
+#include <c10/cuda/CUDAGuard.h>
 #include <pybind11/numpy.h>
 #endif
 #define NVDR_CTX_ARGS int _nvdr_ctx_dummy

@@ -42,6 +42,18 @@ void TextureFwdKernelCubeLinearMipmapNearest4   (const TextureKernelParams p);
 void TextureFwdKernelCubeLinearMipmapLinear1    (const TextureKernelParams p);
 void TextureFwdKernelCubeLinearMipmapLinear2    (const TextureKernelParams p);
 void TextureFwdKernelCubeLinearMipmapLinear4    (const TextureKernelParams p);
+void TextureFwdKernelLinearMipmapNearestBO1     (const TextureKernelParams p);
+void TextureFwdKernelLinearMipmapNearestBO2     (const TextureKernelParams p);
+void TextureFwdKernelLinearMipmapNearestBO4     (const TextureKernelParams p);
+void TextureFwdKernelLinearMipmapLinearBO1      (const TextureKernelParams p);
+void TextureFwdKernelLinearMipmapLinearBO2      (const TextureKernelParams p);
+void TextureFwdKernelLinearMipmapLinearBO4      (const TextureKernelParams p);
+void TextureFwdKernelCubeLinearMipmapNearestBO1 (const TextureKernelParams p);
+void TextureFwdKernelCubeLinearMipmapNearestBO2 (const TextureKernelParams p);
+void TextureFwdKernelCubeLinearMipmapNearestBO4 (const TextureKernelParams p);
+void TextureFwdKernelCubeLinearMipmapLinearBO1  (const TextureKernelParams p);
+void TextureFwdKernelCubeLinearMipmapLinearBO2  (const TextureKernelParams p);
+void TextureFwdKernelCubeLinearMipmapLinearBO4  (const TextureKernelParams p);
 void MipGradKernel1                             (const TextureKernelParams p);
 void MipGradKernel2                             (const TextureKernelParams p);
 void MipGradKernel4                             (const TextureKernelParams p);
@@ -53,6 +65,10 @@ void TextureGradKernelCubeNearest               (const TextureKernelParams p);
 void TextureGradKernelCubeLinear                (const TextureKernelParams p);
 void TextureGradKernelCubeLinearMipmapNearest   (const TextureKernelParams p);
 void TextureGradKernelCubeLinearMipmapLinear    (const TextureKernelParams p);
+void TextureGradKernelLinearMipmapNearestBO     (const TextureKernelParams p);
+void TextureGradKernelLinearMipmapLinearBO      (const TextureKernelParams p);
+void TextureGradKernelCubeLinearMipmapNearestBO (const TextureKernelParams p);
+void TextureGradKernelCubeLinearMipmapLinearBO  (const TextureKernelParams p);
 
 //------------------------------------------------------------------------
 // Modeselektor.
@@ -81,6 +97,7 @@ static void set_modes(TextureKernelParams& p, int filter_mode, int boundary_mode
 
 TextureMipWrapper texture_construct_mip(torch::Tensor tex, int max_mip_level, bool cube_mode)
 {
+    const at::cuda::OptionalCUDAGuard device_guard(device_of(tex));
     cudaStream_t stream = at::cuda::getCurrentCUDAStream();
     TextureKernelParams p = {}; // Initialize all fields to zero.
     p.mipLevelLimit = max_mip_level;
@@ -112,9 +129,9 @@ TextureMipWrapper texture_construct_mip(torch::Tensor tex, int max_mip_level, bo
 
     // Set mip offsets and calculate total size.
     int mipTotal = calculateMipInfo(NVDR_CTX_PARAMS, p);
-    
+
     // Allocate and set mip tensor.
-    torch::TensorOptions opts = torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCUDA);    
+    torch::TensorOptions opts = torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCUDA);
     torch::Tensor mip = torch::empty({mipTotal}, opts);
     p.mip = mip.data_ptr<float>();
 
@@ -139,7 +156,7 @@ TextureMipWrapper texture_construct_mip(torch::Tensor tex, int max_mip_level, bo
         NVDR_CHECK_CUDA_ERROR(cudaLaunchKernel(build_func_tbl[channel_div_idx], gridSize, blockSize, args, 0, stream));
     }
 
-    // Return the mip tensor in a wrapper.    
+    // Return the mip tensor in a wrapper.
     TextureMipWrapper mip_wrap;
     mip_wrap.mip = mip;
     mip_wrap.max_mip_level = max_mip_level;
@@ -151,31 +168,46 @@ TextureMipWrapper texture_construct_mip(torch::Tensor tex, int max_mip_level, bo
 //------------------------------------------------------------------------
 // Forward op.
 
-torch::Tensor texture_fwd_mip(torch::Tensor tex, torch::Tensor uv, torch::Tensor uv_da, TextureMipWrapper mip_wrap, int filter_mode, int boundary_mode)
+torch::Tensor texture_fwd_mip(torch::Tensor tex, torch::Tensor uv, torch::Tensor uv_da, torch::Tensor mip_level_bias, TextureMipWrapper mip_wrap, int filter_mode, int boundary_mode)
 {
+    const at::cuda::OptionalCUDAGuard device_guard(device_of(tex));
     cudaStream_t stream = at::cuda::getCurrentCUDAStream();
     TextureKernelParams p = {}; // Initialize all fields to zero.
     torch::Tensor& mip = mip_wrap.mip; // Unwrap.
     int max_mip_level = mip_wrap.max_mip_level;
     set_modes(p, filter_mode, boundary_mode, max_mip_level);
+
+    // See if we have these tensors or not.
+    bool has_uv_da = uv_da.defined() && uv_da.nbytes();
+    bool has_mip_level_bias = mip_level_bias.defined() && mip_level_bias.nbytes();
+
     if (p.enableMip)
     {
-        NVDR_CHECK(uv_da.defined(), "mipmapping filter mode requires uv_da input");
+        NVDR_CHECK(has_uv_da || has_mip_level_bias, "mipmapping filter mode requires uv_da and/or mip_level_bias input");
         NVDR_CHECK(mip.defined(), "mipmapping filter mode requires mip tensor input");
     }
 
     // Check inputs.
+    NVDR_CHECK_DEVICE(tex, uv);
+    NVDR_CHECK_CONTIGUOUS(tex, uv);
+    NVDR_CHECK_F32(tex, uv);
     if (p.enableMip)
     {
-        NVDR_CHECK_DEVICE(tex, uv, uv_da, mip);
-        NVDR_CHECK_CONTIGUOUS(tex, uv, uv_da, mip);
-        NVDR_CHECK_F32(tex, uv, uv_da, mip);
-    }
-    else
-    {
-        NVDR_CHECK_DEVICE(tex, uv);
-        NVDR_CHECK_CONTIGUOUS(tex, uv);
-        NVDR_CHECK_F32(tex, uv);
+        NVDR_CHECK_DEVICE(mip);
+        NVDR_CHECK_CONTIGUOUS(mip);
+        NVDR_CHECK_F32(mip);
+        if (has_uv_da)
+        {
+            NVDR_CHECK_DEVICE(uv_da);
+            NVDR_CHECK_CONTIGUOUS(uv_da);
+            NVDR_CHECK_F32(uv_da);
+        }
+        if (has_mip_level_bias)
+        {
+            NVDR_CHECK_DEVICE(mip_level_bias);
+            NVDR_CHECK_CONTIGUOUS(mip_level_bias);
+            NVDR_CHECK_F32(mip_level_bias);
+        }
     }
 
     // Sanity checks and state setters.
@@ -205,19 +237,25 @@ torch::Tensor texture_fwd_mip(torch::Tensor tex, torch::Tensor uv, torch::Tensor
     p.texDepth  = tex.size(0);
     if (p.enableMip)
     {
-        if (!cube_mode)
-            NVDR_CHECK(uv_da.sizes().size() == 4 && uv_da.size(0) == p.n && uv_da.size(1) == p.imgHeight && uv_da.size(2) == p.imgWidth && uv_da.size(3) == 4, "uv_da must have shape [minibatch_size, height, width, 4]");
-        else
-            NVDR_CHECK(uv_da.sizes().size() == 4 && uv_da.size(0) == p.n && uv_da.size(1) == p.imgHeight && uv_da.size(2) == p.imgWidth && uv_da.size(3) == 6, "uv_da must have shape [minibatch_size, height, width, 6] in cube map mode");
+        if (has_uv_da)
+        {
+            if (!cube_mode)
+                NVDR_CHECK(uv_da.sizes().size() == 4 && uv_da.size(0) == p.n && uv_da.size(1) == p.imgHeight && uv_da.size(2) == p.imgWidth && uv_da.size(3) == 4, "uv_da must have shape [minibatch_size, height, width, 4]");
+            else
+                NVDR_CHECK(uv_da.sizes().size() == 4 && uv_da.size(0) == p.n && uv_da.size(1) == p.imgHeight && uv_da.size(2) == p.imgWidth && uv_da.size(3) == 6, "uv_da must have shape [minibatch_size, height, width, 6] in cube map mode");
+        }
+        if (has_mip_level_bias)
+            NVDR_CHECK(mip_level_bias.sizes().size() == 3 && mip_level_bias.size(0) == p.n && mip_level_bias.size(1) == p.imgHeight && mip_level_bias.size(2) == p.imgWidth, "mip_level_bias must have shape [minibatch_size, height, width]");
     }
 
     // Get input pointers.
     p.tex = tex.data_ptr<float>();
     p.uv = uv.data_ptr<float>();
-    p.uvDA = p.enableMip ? uv_da.data_ptr<float>() : NULL;
+    p.uvDA = (p.enableMip && has_uv_da) ? uv_da.data_ptr<float>() : NULL;
+    p.mipLevelBias = (p.enableMip && has_mip_level_bias) ? mip_level_bias.data_ptr<float>() : NULL;
 
     // Allocate output tensor.
-    torch::TensorOptions opts = torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCUDA);    
+    torch::TensorOptions opts = torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCUDA);
     torch::Tensor out = torch::empty({p.n, p.imgHeight, p.imgWidth, p.channels}, opts);
     p.out = out.data_ptr<float>();
 
@@ -263,8 +301,8 @@ torch::Tensor texture_fwd_mip(torch::Tensor tex, torch::Tensor uv, torch::Tensor
     dim3 blockSize = getLaunchBlockSize(TEX_FWD_MAX_KERNEL_BLOCK_WIDTH, TEX_FWD_MAX_KERNEL_BLOCK_HEIGHT, p.imgWidth, p.imgHeight);
     dim3 gridSize  = getLaunchGridSize(blockSize, p.imgWidth, p.imgHeight, p.n);
 
-    // Choose kernel based on filter mode, cube mode, and datatype.
-    void* func_tbl[TEX_MODE_COUNT * 3 * 2] = {
+    // Choose kernel based on filter mode, cube mode, bias-only mode, and datatype.
+    void* func_tbl[TEX_MODE_COUNT * 2 * 2 * 3] = {
         (void*)TextureFwdKernelNearest1,
         (void*)TextureFwdKernelNearest2,
         (void*)TextureFwdKernelNearest4,
@@ -289,13 +327,39 @@ torch::Tensor texture_fwd_mip(torch::Tensor tex, torch::Tensor uv, torch::Tensor
         (void*)TextureFwdKernelCubeLinearMipmapLinear1,
         (void*)TextureFwdKernelCubeLinearMipmapLinear2,
         (void*)TextureFwdKernelCubeLinearMipmapLinear4,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        (void*)TextureFwdKernelLinearMipmapNearestBO1,
+        (void*)TextureFwdKernelLinearMipmapNearestBO2,
+        (void*)TextureFwdKernelLinearMipmapNearestBO4,
+        (void*)TextureFwdKernelLinearMipmapLinearBO1,
+        (void*)TextureFwdKernelLinearMipmapLinearBO2,
+        (void*)TextureFwdKernelLinearMipmapLinearBO4,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        (void*)TextureFwdKernelCubeLinearMipmapNearestBO1,
+        (void*)TextureFwdKernelCubeLinearMipmapNearestBO2,
+        (void*)TextureFwdKernelCubeLinearMipmapNearestBO4,
+        (void*)TextureFwdKernelCubeLinearMipmapLinearBO1,
+        (void*)TextureFwdKernelCubeLinearMipmapLinearBO2,
+        (void*)TextureFwdKernelCubeLinearMipmapLinearBO4,
     };
 
     // Function index.
     int func_idx = p.filterMode;
     if (cube_mode)
-        func_idx += TEX_MODE_COUNT;
-    func_idx = func_idx * 3 + channel_div_idx;
+        func_idx += TEX_MODE_COUNT; // Cube variant.
+    if (p.enableMip && !has_uv_da)
+        func_idx += TEX_MODE_COUNT * 2; // Bias-only variant.
+    func_idx = func_idx * 3 + channel_div_idx; // Choose vector size.
 
     // Launch kernel.
     NVDR_CHECK_CUDA_ERROR(cudaLaunchKernel(func_tbl[func_idx], gridSize, blockSize, args, 0, stream));
@@ -308,37 +372,52 @@ torch::Tensor texture_fwd_mip(torch::Tensor tex, torch::Tensor uv, torch::Tensor
 torch::Tensor texture_fwd(torch::Tensor tex, torch::Tensor uv, int filter_mode, int boundary_mode)
 {
     torch::Tensor empty_tensor;
-    return texture_fwd_mip(tex, uv, empty_tensor, TextureMipWrapper(), filter_mode, boundary_mode);
+    return texture_fwd_mip(tex, uv, empty_tensor, empty_tensor, TextureMipWrapper(), filter_mode, boundary_mode);
 }
 
 //------------------------------------------------------------------------
 // Gradient op.
 
-std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> texture_grad_linear_mipmap_linear(torch::Tensor tex, torch::Tensor uv, torch::Tensor dy, torch::Tensor uv_da, TextureMipWrapper mip_wrap, int filter_mode, int boundary_mode)
+std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> texture_grad_linear_mipmap_linear(torch::Tensor tex, torch::Tensor uv, torch::Tensor dy, torch::Tensor uv_da, torch::Tensor mip_level_bias, TextureMipWrapper mip_wrap, int filter_mode, int boundary_mode)
 {
+    const at::cuda::OptionalCUDAGuard device_guard(device_of(tex));
     cudaStream_t stream = at::cuda::getCurrentCUDAStream();
     TextureKernelParams p = {}; // Initialize all fields to zero.
     torch::Tensor& mip = mip_wrap.mip; // Unwrap.
     int max_mip_level = mip_wrap.max_mip_level;
     set_modes(p, filter_mode, boundary_mode, max_mip_level);
+
+    // See if we have these tensors or not.
+    bool has_uv_da = uv_da.defined() && uv_da.nbytes();
+    bool has_mip_level_bias = mip_level_bias.defined() && mip_level_bias.nbytes();
+
     if (p.enableMip)
     {
-        NVDR_CHECK(uv_da.defined(), "mipmapping filter mode requires uv_da input in gradient");
-        NVDR_CHECK(mip.defined(), "mipmapping filter mode requires mip input in gradient");
+        NVDR_CHECK(has_uv_da || has_mip_level_bias, "mipmapping filter mode requires uv_da and/or mip_level_bias input");
+        NVDR_CHECK(mip.defined(), "mipmapping filter mode requires mip tensor input");
     }
 
     // Check inputs.
+    NVDR_CHECK_DEVICE(tex, uv);
+    NVDR_CHECK_CONTIGUOUS(tex, uv);
+    NVDR_CHECK_F32(tex, uv);
     if (p.enableMip)
     {
-        NVDR_CHECK_DEVICE(tex, uv, dy, uv_da, mip);
-        NVDR_CHECK_CONTIGUOUS(tex, uv, uv_da, mip);
-        NVDR_CHECK_F32(tex, uv, dy, uv_da, mip);
-    }
-    else
-    {
-        NVDR_CHECK_DEVICE(tex, uv, dy);
-        NVDR_CHECK_CONTIGUOUS(tex, uv);
-        NVDR_CHECK_F32(tex, uv, dy);
+        NVDR_CHECK_DEVICE(mip);
+        NVDR_CHECK_CONTIGUOUS(mip);
+        NVDR_CHECK_F32(mip);
+        if (has_uv_da)
+        {
+            NVDR_CHECK_DEVICE(uv_da);
+            NVDR_CHECK_CONTIGUOUS(uv_da);
+            NVDR_CHECK_F32(uv_da);
+        }
+        if (has_mip_level_bias)
+        {
+            NVDR_CHECK_DEVICE(mip_level_bias);
+            NVDR_CHECK_CONTIGUOUS(mip_level_bias);
+            NVDR_CHECK_F32(mip_level_bias);
+        }
     }
 
     // Sanity checks and state setters.
@@ -368,13 +447,18 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> texture_grad_linear_mipm
     p.texDepth  = tex.size(0);
     if (p.enableMip)
     {
-        if (!cube_mode)
-            NVDR_CHECK(uv_da.sizes().size() == 4 && uv_da.size(0) == p.n && uv_da.size(1) == p.imgHeight && uv_da.size(2) == p.imgWidth && uv_da.size(3) == 4, "uv_da must have shape [minibatch_size, height, width, 4]");
-        else
-            NVDR_CHECK(uv_da.sizes().size() == 4 && uv_da.size(0) == p.n && uv_da.size(1) == p.imgHeight && uv_da.size(2) == p.imgWidth && uv_da.size(3) == 6, "uv_da must have shape [minibatch_size, height, width, 6] in cube map mode");
+        if (has_uv_da)
+        {
+            if (!cube_mode)
+                NVDR_CHECK(uv_da.sizes().size() == 4 && uv_da.size(0) == p.n && uv_da.size(1) == p.imgHeight && uv_da.size(2) == p.imgWidth && uv_da.size(3) == 4, "uv_da must have shape [minibatch_size, height, width, 4]");
+            else
+                NVDR_CHECK(uv_da.sizes().size() == 4 && uv_da.size(0) == p.n && uv_da.size(1) == p.imgHeight && uv_da.size(2) == p.imgWidth && uv_da.size(3) == 6, "uv_da must have shape [minibatch_size, height, width, 6] in cube map mode");
+        }
+        if (has_mip_level_bias)
+            NVDR_CHECK(mip_level_bias.sizes().size() == 3 && mip_level_bias.size(0) == p.n && mip_level_bias.size(1) == p.imgHeight && mip_level_bias.size(2) == p.imgWidth, "mip_level_bias must have shape [minibatch_size, height, width]");
     }
     NVDR_CHECK(dy.sizes().size() == 4 && dy.size(0) == p.n && dy.size(1) == p.imgHeight && dy.size(2) == p.imgWidth && dy.size(3) == p.channels, "dy must have shape [minibatch_size, height, width, channels]");
-        
+
     // Get contiguous version of dy.
     torch::Tensor dy_ = dy.contiguous();
 
@@ -382,7 +466,8 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> texture_grad_linear_mipm
     p.tex = tex.data_ptr<float>();
     p.uv = uv.data_ptr<float>();
     p.dy = dy_.data_ptr<float>();
-    p.uvDA = p.enableMip ? uv_da.data_ptr<float>() : NULL;
+    p.uvDA = (p.enableMip && has_uv_da) ? uv_da.data_ptr<float>() : NULL;
+    p.mipLevelBias = (p.enableMip && has_mip_level_bias) ? mip_level_bias.data_ptr<float>() : NULL;
     p.mip = p.enableMip ? (float*)mip.data_ptr<float>() : NULL;
 
     // Allocate output tensor for tex gradient.
@@ -392,16 +477,28 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> texture_grad_linear_mipm
     // Allocate output tensor for uv gradient.
     torch::Tensor grad_uv;
     torch::Tensor grad_uv_da;
+    torch::Tensor grad_mip_level_bias;
     if (p.filterMode != TEX_MODE_NEAREST)
     {
         grad_uv = torch::empty_like(uv);
         p.gradUV = grad_uv.data_ptr<float>();
 
-        // Allocate output tensor for uv_da gradient.
+        // Gradients for things affecting mip level.
         if (p.filterMode == TEX_MODE_LINEAR_MIPMAP_LINEAR)
         {
-            grad_uv_da = torch::empty_like(uv_da);
-            p.gradUVDA = grad_uv_da.data_ptr<float>();
+            // Allocate output tensor for uv_da gradient.
+            if (has_uv_da)
+            {
+                grad_uv_da = torch::empty_like(uv_da);
+                p.gradUVDA = grad_uv_da.data_ptr<float>();
+            }
+
+            // Allocate output tensor for mip_level_bias gradient.
+            if (has_mip_level_bias)
+            {
+                grad_mip_level_bias = torch::empty_like(mip_level_bias);
+                p.gradMipLevelBias = grad_mip_level_bias.data_ptr<float>();
+            }
         }
     }
 
@@ -457,7 +554,7 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> texture_grad_linear_mipm
     dim3 blockSize = getLaunchBlockSize(TEX_GRAD_MAX_KERNEL_BLOCK_WIDTH, TEX_GRAD_MAX_KERNEL_BLOCK_HEIGHT, p.imgWidth, p.imgHeight);
     dim3 gridSize  = getLaunchGridSize(blockSize, p.imgWidth, p.imgHeight, p.n);
 
-    void* func_tbl[TEX_MODE_COUNT * 2] = { 
+    void* func_tbl[TEX_MODE_COUNT * 2 * 2] = {
         (void*)TextureGradKernelNearest,
         (void*)TextureGradKernelLinear,
         (void*)TextureGradKernelLinearMipmapNearest,
@@ -466,12 +563,22 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> texture_grad_linear_mipm
         (void*)TextureGradKernelCubeLinear,
         (void*)TextureGradKernelCubeLinearMipmapNearest,
         (void*)TextureGradKernelCubeLinearMipmapLinear,
+        NULL,
+        NULL,
+        (void*)TextureGradKernelLinearMipmapNearestBO,
+        (void*)TextureGradKernelLinearMipmapLinearBO,
+        NULL,
+        NULL,
+        (void*)TextureGradKernelCubeLinearMipmapNearestBO,
+        (void*)TextureGradKernelCubeLinearMipmapLinearBO,
     };
 
     // Function index.
     int func_idx = p.filterMode;
     if (cube_mode)
-        func_idx += TEX_MODE_COUNT;
+        func_idx += TEX_MODE_COUNT; // Cube variant.
+    if (p.enableMip && !has_uv_da)
+        func_idx += TEX_MODE_COUNT * 2; // Bias-only variant.
 
     // Launch main gradient kernel.
     NVDR_CHECK_CUDA_ERROR(cudaLaunchKernel(func_tbl[func_idx], gridSize, blockSize, args, 0, stream));
@@ -488,14 +595,14 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> texture_grad_linear_mipm
     }
 
     // Return output tensors.
-    return std::tuple<torch::Tensor, torch::Tensor, torch::Tensor>(grad_tex, grad_uv, grad_uv_da);
+    return std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>(grad_tex, grad_uv, grad_uv_da, grad_mip_level_bias);
 }
 
 // Version for nearest filter mode.
 torch::Tensor texture_grad_nearest(torch::Tensor tex, torch::Tensor uv, torch::Tensor dy, int filter_mode, int boundary_mode)
 {
     torch::Tensor empty_tensor;
-    std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> result = texture_grad_linear_mipmap_linear(tex, uv, dy, empty_tensor, TextureMipWrapper(), filter_mode, boundary_mode);
+    std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> result = texture_grad_linear_mipmap_linear(tex, uv, dy, empty_tensor, empty_tensor, TextureMipWrapper(), filter_mode, boundary_mode);
     return std::get<0>(result);
 }
 
@@ -503,14 +610,14 @@ torch::Tensor texture_grad_nearest(torch::Tensor tex, torch::Tensor uv, torch::T
 std::tuple<torch::Tensor, torch::Tensor> texture_grad_linear(torch::Tensor tex, torch::Tensor uv, torch::Tensor dy, int filter_mode, int boundary_mode)
 {
     torch::Tensor empty_tensor;
-    std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> result = texture_grad_linear_mipmap_linear(tex, uv, dy, empty_tensor, TextureMipWrapper(), filter_mode, boundary_mode);
+    std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> result = texture_grad_linear_mipmap_linear(tex, uv, dy, empty_tensor, empty_tensor, TextureMipWrapper(), filter_mode, boundary_mode);
     return std::tuple<torch::Tensor, torch::Tensor>(std::get<0>(result), std::get<1>(result));
 }
 
 // Version for linear-mipmap-nearest mode.
-std::tuple<torch::Tensor, torch::Tensor> texture_grad_linear_mipmap_nearest(torch::Tensor tex, torch::Tensor uv, torch::Tensor dy, torch::Tensor uv_da, TextureMipWrapper mip, int filter_mode, int boundary_mode)
+std::tuple<torch::Tensor, torch::Tensor> texture_grad_linear_mipmap_nearest(torch::Tensor tex, torch::Tensor uv, torch::Tensor dy, torch::Tensor uv_da, torch::Tensor mip_level_bias, TextureMipWrapper mip, int filter_mode, int boundary_mode)
 {
-    std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> result = texture_grad_linear_mipmap_linear(tex, uv, dy, uv_da, mip, filter_mode, boundary_mode);
+    std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> result = texture_grad_linear_mipmap_linear(tex, uv, dy, uv_da, mip_level_bias, mip, filter_mode, boundary_mode);
     return std::tuple<torch::Tensor, torch::Tensor>(std::get<0>(result), std::get<1>(result));
 }
 
