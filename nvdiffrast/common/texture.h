@@ -21,7 +21,7 @@
 #define TEX_GRAD_MAX_KERNEL_BLOCK_HEIGHT        8
 #define TEX_GRAD_MAX_MIP_KERNEL_BLOCK_WIDTH     8
 #define TEX_GRAD_MAX_MIP_KERNEL_BLOCK_HEIGHT    8
-#define TEX_MAX_MIP_LEVEL                       14  // Currently a texture cannot be larger than 2 GB because we use 32-bit indices everywhere.
+#define TEX_MAX_MIP_LEVEL                       16  // Currently a texture cannot be larger than 2 GB because we use 32-bit indices everywhere.
 #define TEX_MODE_NEAREST                        0   // Nearest on base level.
 #define TEX_MODE_LINEAR                         1   // Bilinear on base level.
 #define TEX_MODE_LINEAR_MIPMAP_NEAREST          2   // Bilinear on nearest mip level.
@@ -38,15 +38,13 @@
 
 struct TextureKernelParams
 {
-    const float*    tex;                            // Incoming texture buffer.
+    const float*    tex[TEX_MAX_MIP_LEVEL];         // Incoming texture buffer with mip levels.
     const float*    uv;                             // Incoming texcoord buffer.
     const float*    uvDA;                           // Incoming uv pixel diffs or NULL.
     const float*    mipLevelBias;                   // Incoming mip level bias or NULL.
     const float*    dy;                             // Incoming output gradient.
-    float*          mip;                            // Mip data buffer.
     float*          out;                            // Outgoing texture data.
-    float*          gradTex;                        // Outgoing texture gradient.
-    float*          gradTexMip;                     // Temporary texture gradients for mip levels > 0.
+    float*          gradTex[TEX_MAX_MIP_LEVEL];     // Outgoing texture gradients with mip levels.
     float*          gradUV;                         // Outgoing texcoord gradient.
     float*          gradUVDA;                       // Outgoing texcoord pixel differential gradient.
     float*          gradMipLevelBias;               // Outgoing mip level bias gradient.
@@ -63,7 +61,6 @@ struct TextureKernelParams
     int             texDepth;                       // Texture depth.
     int             n;                              // Minibatch size.
     int             mipLevelMax;                    // Maximum mip level index. Zero if mips disabled.
-    int             mipOffset[TEX_MAX_MIP_LEVEL];   // Offsets in mip data. 0: unused, 1+: offset to mip.
     int             mipLevelOut;                    // Mip level being calculated in builder kernel.
 };
 
@@ -71,7 +68,7 @@ struct TextureKernelParams
 // C++ helper function prototypes.
 
 void raiseMipSizeError(NVDR_CTX_ARGS, const TextureKernelParams& p);
-int calculateMipInfo(NVDR_CTX_ARGS, TextureKernelParams& p);
+int calculateMipInfo(NVDR_CTX_ARGS, TextureKernelParams& p, int* mipOffsets);
 
 //------------------------------------------------------------------------
 // Macros.

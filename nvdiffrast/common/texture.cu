@@ -629,8 +629,8 @@ static __forceinline__ __device__ void MipBuildKernelTemplate(const TextureKerne
     int pidx_out = p.channels * (px + sz_out.x * (py + sz_out.y * pz));
 
     // Input and output pointers.
-    const float* pin = (p.mipLevelOut > 1) ? (p.mip + p.mipOffset[p.mipLevelOut - 1]) : p.tex;
-    float* pout = p.mip + p.mipOffset[p.mipLevelOut];
+    const float* pin = p.tex[p.mipLevelOut - 1];
+    float* pout = (float*)p.tex[p.mipLevelOut];
 
     // Special case: Input texture height or width is 1.
     if (sz_in.x == 1 || sz_in.y == 1)
@@ -703,7 +703,7 @@ static __forceinline__ __device__ void TextureFwdKernelTemplate(const TextureKer
     {
         int tc = indexTextureNearest<CUBE_MODE>(p, uv, tz);
         tc *= p.channels;
-        const float* pIn = p.tex;
+        const float* pIn = p.tex[0];
 
         // Copy if valid tc, otherwise output zero.
         for (int i=0; i < p.channels; i += C)
@@ -721,7 +721,7 @@ static __forceinline__ __device__ void TextureFwdKernelTemplate(const TextureKer
     // Get texel indices and pointer for level 0.
     int4 tc0 = make_int4(0, 0, 0, 0);
     float2 uv0 = indexTextureLinear<CUBE_MODE>(p, uv, tz, tc0, level0);
-    const float* pIn0 = level0 ? (p.mip + p.mipOffset[level0]) : p.tex;
+    const float* pIn0 = p.tex[level0];
     bool corner0 = CUBE_MODE && ((tc0.x | tc0.y | tc0.z | tc0.w) < 0);
     tc0 *= p.channels;
 
@@ -741,7 +741,7 @@ static __forceinline__ __device__ void TextureFwdKernelTemplate(const TextureKer
     // Get texel indices and pointer for level 1.
     int4 tc1 = make_int4(0, 0, 0, 0);
     float2 uv1 = indexTextureLinear<CUBE_MODE>(p, uv, tz, tc1, level1);
-    const float* pIn1 = level1 ? (p.mip + p.mipOffset[level1]) : p.tex;
+    const float* pIn1 = p.tex[level1];
     bool corner1 = CUBE_MODE && ((tc1.x | tc1.y | tc1.z | tc1.w) < 0);
     tc1 *= p.channels;
 
@@ -851,13 +851,13 @@ static __forceinline__ __device__ void MipGradKernelTemplate(const TextureKernel
         x >>= 1;
         y >>= 1;
 
-        T* pIn = (T*)(p.gradTexMip + p.mipOffset[level] + (x + sz.x * (y + sz.y * pz)) * p.channels);
+        T* pIn = (T*)(p.gradTex[level] + (x + sz.x * (y + sz.y * pz)) * p.channels);
         for (int i=0; i < c; i++)
             accum_from_mem(TEXEL_ACCUM(i * C), sharedStride, pIn[i], w);
     }
 
     // Add to main texture gradients.
-    T* pOut = (T*)(p.gradTex + (px + p.texWidth * (py + p.texHeight * pz)) * p.channels);
+    T* pOut = (T*)(p.gradTex[0] + (px + p.texWidth * (py + p.texHeight * pz)) * p.channels);
     for (int i=0; i < c; i++)
         accum_to_mem(pOut[i], TEXEL_ACCUM(i * C), sharedStride);
 }
@@ -953,7 +953,7 @@ static __forceinline__ __device__ void TextureGradKernelTemplate(const TextureKe
             return; // Outside texture.
 
         tc *= p.channels;
-        float* pOut = p.gradTex;
+        float* pOut = p.gradTex[0];
 
         // Accumulate texture gradients.
         for (int i=0; i < p.channels; i++)
@@ -977,8 +977,8 @@ static __forceinline__ __device__ void TextureGradKernelTemplate(const TextureKe
     // Get texel indices and pointers for level 0.
     int4 tc0 = make_int4(0, 0, 0, 0);
     float2 uv0 = indexTextureLinear<CUBE_MODE>(p, uv, tz, tc0, level0);
-    const float* pIn0 = level0 ? (p.mip + p.mipOffset[level0]) : p.tex;
-    float* pOut0 = level0 ? (p.gradTexMip + p.mipOffset[level0]) : p.gradTex;
+    const float* pIn0 = p.tex[level0];
+    float* pOut0 = p.gradTex[level0];
     bool corner0 = CUBE_MODE && ((tc0.x | tc0.y | tc0.z | tc0.w) < 0);
     tc0 *= p.channels;
 
@@ -1024,8 +1024,8 @@ static __forceinline__ __device__ void TextureGradKernelTemplate(const TextureKe
     // Get texel indices and pointers for level 1.
     int4 tc1 = make_int4(0, 0, 0, 0);
     float2 uv1 = indexTextureLinear<CUBE_MODE>(p, uv, tz, tc1, level1);
-    const float* pIn1 = level1 ? (p.mip + p.mipOffset[level1]) : p.tex;
-    float* pOut1 = level1 ? (p.gradTexMip + p.mipOffset[level1]) : p.gradTex;
+    const float* pIn1 = p.tex[level1];
+    float* pOut1 = p.gradTex[level1];
     bool corner1 = CUBE_MODE && ((tc1.x | tc1.y | tc1.z | tc1.w) < 0);
     tc1 *= p.channels;
 

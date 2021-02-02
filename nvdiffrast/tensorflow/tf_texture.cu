@@ -97,7 +97,7 @@ struct TextureFwdOp : public OpKernel
         }
 
         // Get input pointers.
-        p.tex = tex.flat<float>().data();
+        p.tex[0] = tex.flat<float>().data();
         p.uv = uv.flat<float>().data();
         p.uvDA = p.enableMip ? uv_da.flat<float>().data() : 0;
 
@@ -120,10 +120,12 @@ struct TextureFwdOp : public OpKernel
             channel_div_idx = 1;  // Channel count divisible by 2.
 
         // Mip-related setup.
+        float* pmip = 0;
         if (p.enableMip)
         {
             // Generate mip offsets.
-            int mipTotal = calculateMipInfo(ctx, p);
+            int mipOffsets[TEX_MAX_MIP_LEVEL];
+            int mipTotal = calculateMipInfo(ctx, p, mipOffsets);
 
             // Mip output tensor.
             Tensor* mip_tensor = NULL;
@@ -157,7 +159,9 @@ struct TextureFwdOp : public OpKernel
                 OP_REQUIRES_OK(ctx, ctx->allocate_output(1, mip_shape, &mip_tensor));
             }
 
-            p.mip = mip_tensor->flat<float>().data(); // Pointer to data.
+            pmip = mip_tensor->flat<float>().data(); // Pointer to data.
+            for (int i=1; i <= p.mipLevelMax; i++)
+                p.tex[i] = pmip + mipOffsets[i]; // Pointers to mip levels.
 
             // Build mip levels if needed.
             if (computeMip)
@@ -181,15 +185,15 @@ struct TextureFwdOp : public OpKernel
             OP_REQUIRES(ctx, !((uintptr_t)p.uv & 7), errors::Internal("uv input tensor not aligned to float2"));
         if ((p.channels & 3) == 0)
         {
-            OP_REQUIRES(ctx, !((uintptr_t)p.tex & 15), errors::Internal("tex input tensor not aligned to float4"));
-            OP_REQUIRES(ctx, !((uintptr_t)p.out & 15), errors::Internal("out output tensor not aligned to float4"));
-            OP_REQUIRES(ctx, !((uintptr_t)p.mip & 15), errors::Internal("mip output tensor not aligned to float4"));
+            OP_REQUIRES(ctx, !((uintptr_t)p.tex[0] & 15), errors::Internal("tex input tensor not aligned to float4"));
+            OP_REQUIRES(ctx, !((uintptr_t)p.out    & 15), errors::Internal("out output tensor not aligned to float4"));
+            OP_REQUIRES(ctx, !((uintptr_t)pmip     & 15), errors::Internal("mip output tensor not aligned to float4"));
         }
         if ((p.channels & 1) == 0)
         {
-            OP_REQUIRES(ctx, !((uintptr_t)p.tex & 7), errors::Internal("tex input tensor not aligned to float2"));
-            OP_REQUIRES(ctx, !((uintptr_t)p.out & 7), errors::Internal("out output tensor not aligned to float2"));
-            OP_REQUIRES(ctx, !((uintptr_t)p.mip & 7), errors::Internal("mip output tensor not aligned to float2"));
+            OP_REQUIRES(ctx, !((uintptr_t)p.tex[0] & 7), errors::Internal("tex input tensor not aligned to float2"));
+            OP_REQUIRES(ctx, !((uintptr_t)p.out    & 7), errors::Internal("out output tensor not aligned to float2"));
+            OP_REQUIRES(ctx, !((uintptr_t)pmip     & 7), errors::Internal("mip output tensor not aligned to float2"));
         }
         if (!cube_mode)
             OP_REQUIRES(ctx, !((uintptr_t)p.uvDA & 15), errors::Internal("uv_da input tensor not aligned to float4"));
@@ -278,7 +282,7 @@ struct TextureGradOp : public OpKernel
         TextureKernelParams& p = m_attribs;
         cudaStream_t stream = ctx->eigen_device<Eigen::GpuDevice>().stream();
         bool cube_mode = (p.boundaryMode == TEX_BOUNDARY_MODE_CUBE);
-        
+
         // Get input.
         const Tensor& tex   = ctx->input(0);
         const Tensor& uv    = ctx->input(1);
@@ -325,13 +329,13 @@ struct TextureGradOp : public OpKernel
             else
                 OP_REQUIRES(ctx, uv_da.dims() == 4 && uv_da.dim_size(0) == p.n && uv_da.dim_size(1) == p.imgHeight && uv_da.dim_size(2) == p.imgWidth && uv_da.dim_size(3) == 6, errors::InvalidArgument("uv_da must have shape [minibatch_size, height, width, 6] in cube map mode"));
         }
-        
+
         // Get input pointers.
-        p.tex = tex.flat<float>().data();
+        p.tex[0] = tex.flat<float>().data();
         p.uv = uv.flat<float>().data();
         p.dy = dy.flat<float>().data();
         p.uvDA = p.enableMip ? uv_da.flat<float>().data() : 0;
-        p.mip = p.enableMip ? (float*)mip.flat<float>().data() : 0;
+        float* pmip = p.enableMip ? (float*)mip.flat<float>().data() : 0;
 
         // Allocate output tensor for tex gradient.
         Tensor* grad_tex_tensor = NULL;
@@ -343,7 +347,7 @@ struct TextureGradOp : public OpKernel
         grad_tex_shape.AddDim(p.texWidth);
         grad_tex_shape.AddDim(p.channels);
         OP_REQUIRES_OK(ctx, ctx->allocate_output(0, grad_tex_shape, &grad_tex_tensor));
-        p.gradTex = grad_tex_tensor->flat<float>().data();
+        p.gradTex[0] = grad_tex_tensor->flat<float>().data();
 
         // Allocate output tensor for uv gradient.
         if (p.filterMode != TEX_MODE_NEAREST)
@@ -376,26 +380,33 @@ struct TextureGradOp : public OpKernel
 
         // Mip-related setup.
         Tensor grad_mip_tensor;
+        float* pgradMip = 0;
         if (p.enableMip)
         {
             // Generate mip offsets.
-            int mipTotal = calculateMipInfo(ctx, p);
+            int mipOffsets[TEX_MAX_MIP_LEVEL];
+            int mipTotal = calculateMipInfo(ctx, p, mipOffsets);
 
             // Get space for temporary mip gradients.
             TensorShape grad_mip_shape;
             grad_mip_shape.AddDim(mipTotal);
             ctx->allocate_temp(DT_FLOAT, grad_mip_shape, &grad_mip_tensor);
-            p.gradTexMip = grad_mip_tensor.flat<float>().data();
+            pgradMip = grad_mip_tensor.flat<float>().data();
+            for (int i=1; i <= p.mipLevelMax; i++)
+            {
+                p.tex[i] = pmip + mipOffsets[i]; // Pointers to mip levels.
+                p.gradTex[i] = pgradMip + mipOffsets[i]; // Pointers to mip gradients.
+            }
 
             // Clear mip gradients.
-            OP_CHECK_CUDA_ERROR(ctx, cudaMemsetAsync(p.gradTexMip, 0, mipTotal * sizeof(float), stream));
+            OP_CHECK_CUDA_ERROR(ctx, cudaMemsetAsync(pgradMip, 0, mipTotal * sizeof(float), stream));
         }
 
         // Initialize texture gradients to zero.
         int texBytes = p.texHeight * p.texWidth * p.texDepth * p.channels * sizeof(float);
         if (cube_mode)
             texBytes *= 6;
-        OP_CHECK_CUDA_ERROR(ctx, cudaMemsetAsync(p.gradTex, 0, texBytes, stream));
+        OP_CHECK_CUDA_ERROR(ctx, cudaMemsetAsync(p.gradTex[0], 0, texBytes, stream));
 
         // Verify that buffers are aligned to allow float2/float4 operations. Unused pointers are zero so always aligned.
         if (!cube_mode)
@@ -412,17 +423,19 @@ struct TextureGradOp : public OpKernel
         }
         if ((p.channels & 3) == 0)
         {
-            OP_REQUIRES(ctx, !((uintptr_t)p.tex     & 15), errors::Internal("tex input tensor not aligned to float4"));
-            OP_REQUIRES(ctx, !((uintptr_t)p.gradTex & 15), errors::Internal("grad_tex output tensor not aligned to float4"));
-            OP_REQUIRES(ctx, !((uintptr_t)p.dy      & 15), errors::Internal("dy input tensor not aligned to float4"));
-            OP_REQUIRES(ctx, !((uintptr_t)p.mip     & 15), errors::Internal("mip input tensor not aligned to float4"));
+            OP_REQUIRES(ctx, !((uintptr_t)p.tex[0]     & 15), errors::Internal("tex input tensor not aligned to float4"));
+            OP_REQUIRES(ctx, !((uintptr_t)p.gradTex[0] & 15), errors::Internal("grad_tex output tensor not aligned to float4"));
+            OP_REQUIRES(ctx, !((uintptr_t)p.dy         & 15), errors::Internal("dy input tensor not aligned to float4"));
+            OP_REQUIRES(ctx, !((uintptr_t)pmip         & 15), errors::Internal("mip input tensor not aligned to float4"));
+            OP_REQUIRES(ctx, !((uintptr_t)pgradMip     & 15), errors::Internal("internal mip gradient tensor not aligned to float4"));
         }
         if ((p.channels & 1) == 0)
         {
-            OP_REQUIRES(ctx, !((uintptr_t)p.tex     & 7), errors::Internal("tex input tensor not aligned to float2"));
-            OP_REQUIRES(ctx, !((uintptr_t)p.gradTex & 7), errors::Internal("grad_tex output tensor not aligned to float2"));
-            OP_REQUIRES(ctx, !((uintptr_t)p.dy      & 7), errors::Internal("dy output tensor not aligned to float2"));
-            OP_REQUIRES(ctx, !((uintptr_t)p.mip     & 7), errors::Internal("mip input tensor not aligned to float2"));
+            OP_REQUIRES(ctx, !((uintptr_t)p.tex[0]     & 7), errors::Internal("tex input tensor not aligned to float2"));
+            OP_REQUIRES(ctx, !((uintptr_t)p.gradTex[0] & 7), errors::Internal("grad_tex output tensor not aligned to float2"));
+            OP_REQUIRES(ctx, !((uintptr_t)p.dy         & 7), errors::Internal("dy output tensor not aligned to float2"));
+            OP_REQUIRES(ctx, !((uintptr_t)pmip         & 7), errors::Internal("mip input tensor not aligned to float2"));
+            OP_REQUIRES(ctx, !((uintptr_t)pgradMip     & 7), errors::Internal("internal mip gradient tensor not aligned to float2"));
         }
 
         // Choose launch parameters for main gradient kernel.
@@ -430,7 +443,7 @@ struct TextureGradOp : public OpKernel
         dim3 blockSize = getLaunchBlockSize(TEX_GRAD_MAX_KERNEL_BLOCK_WIDTH, TEX_GRAD_MAX_KERNEL_BLOCK_HEIGHT, p.imgWidth, p.imgHeight);
         dim3 gridSize  = getLaunchGridSize(blockSize, p.imgWidth, p.imgHeight, p.n);
 
-        void* func_tbl[TEX_MODE_COUNT * 2] = { 
+        void* func_tbl[TEX_MODE_COUNT * 2] = {
             (void*)TextureGradKernelNearest,
             (void*)TextureGradKernelLinear,
             (void*)TextureGradKernelLinearMipmapNearest,

@@ -324,26 +324,29 @@ def interpolate(attr, rast, tri, rast_db=None, diff_attrs=None):
 # Linear-mipmap-linear and linear-mipmap-nearest: Mipmaps enabled.
 class _texture_func_mip(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, filter_mode, tex, uv, uv_da, mip_level_bias, mip, filter_mode_enum, boundary_mode_enum):
+    def forward(ctx, filter_mode, tex, uv, uv_da, mip_level_bias, mip_wrapper, filter_mode_enum, boundary_mode_enum, *mip_stack):
+        empty = torch.tensor([])
         if uv_da is None:
-            uv_da = torch.tensor([])
+            uv_da = empty
         if mip_level_bias is None:
-            mip_level_bias = torch.tensor([])
-        out = _get_plugin().texture_fwd_mip(tex, uv, uv_da, mip_level_bias, mip, filter_mode_enum, boundary_mode_enum)
-        ctx.save_for_backward(tex, uv, uv_da, mip_level_bias)
-        ctx.saved_misc = filter_mode, mip, filter_mode_enum, boundary_mode_enum
+            mip_level_bias = empty
+        if mip_wrapper is None:
+            mip_wrapper = _get_plugin().TextureMipWrapper()
+        out = _get_plugin().texture_fwd_mip(tex, uv, uv_da, mip_level_bias, mip_wrapper, mip_stack, filter_mode_enum, boundary_mode_enum)
+        ctx.save_for_backward(tex, uv, uv_da, mip_level_bias, *mip_stack)
+        ctx.saved_misc = filter_mode, mip_wrapper, filter_mode_enum, boundary_mode_enum
         return out
 
     @staticmethod
     def backward(ctx, dy):
-        tex, uv, uv_da, mip_level_bias = ctx.saved_variables
-        filter_mode, mip, filter_mode_enum, boundary_mode_enum = ctx.saved_misc
+        tex, uv, uv_da, mip_level_bias, *mip_stack = ctx.saved_variables
+        filter_mode, mip_wrapper, filter_mode_enum, boundary_mode_enum = ctx.saved_misc
         if filter_mode == 'linear-mipmap-linear':
-            g_tex, g_uv, g_uv_da, g_mip_level_bias = _get_plugin().texture_grad_linear_mipmap_linear(tex, uv, dy, uv_da, mip_level_bias, mip, filter_mode_enum, boundary_mode_enum)
-            return None, g_tex, g_uv, g_uv_da, g_mip_level_bias, None, None, None
+            g_tex, g_uv, g_uv_da, g_mip_level_bias, g_mip_stack = _get_plugin().texture_grad_linear_mipmap_linear(tex, uv, dy, uv_da, mip_level_bias, mip_wrapper, mip_stack, filter_mode_enum, boundary_mode_enum)
+            return (None, g_tex, g_uv, g_uv_da, g_mip_level_bias, None, None, None) + tuple(g_mip_stack)
         else: # linear-mipmap-nearest
-            g_tex, g_uv = _get_plugin().texture_grad_linear_mipmap_nearest(tex, uv, dy, uv_da, mip_level_bias, mip, filter_mode_enum, boundary_mode_enum)
-            return None, g_tex, g_uv, None, None, None, None, None
+            g_tex, g_uv, g_mip_stack = _get_plugin().texture_grad_linear_mipmap_nearest(tex, uv, dy, uv_da, mip_level_bias, mip_wrapper, mip_stack, filter_mode_enum, boundary_mode_enum)
+            return (None, g_tex, g_uv, None, None, None, None, None) + tuple(g_mip_stack)
 
 # Linear and nearest: Mipmaps disabled.
 class _texture_func(torch.autograd.Function):
@@ -386,8 +389,12 @@ def texture(tex, uv, uv_da=None, mip_level_bias=None, mip=None, filter_mode='aut
                as long.
         mip_level_bias: (Optional) Per-pixel bias for mip level selection. If `uv_da` is omitted,
                         determines mip level directly. Must have shape [minibatch_size, height, width].
-        mip: (Optional) Preconstructed mipmap stack from a `texture_construct_mip()` call. If not
-             specified, the mipmap stack is constructed internally and discarded afterwards.
+        mip: (Optional) Preconstructed mipmap stack from a `texture_construct_mip()` call or a list
+                        of tensors specifying a custom mipmap stack. Gradients of a custom mipmap stack
+                        are not automatically propagated to base texture but the mipmap tensors will
+                        receive gradients of their own. If a mipmap stack is not specified but the chosen
+                        filter mode requires it, the mipmap stack is constructed internally and
+                        discarded afterwards.
         filter_mode: Texture filtering mode to be used. Valid values are 'auto', 'nearest',
                      'linear', 'linear-mipmap-nearest', and 'linear-mipmap-linear'. Mode 'auto'
                      selects 'linear' if neither `uv_da` or `mip_level_bias` is specified, and
@@ -437,14 +444,20 @@ def texture(tex, uv, uv_da=None, mip_level_bias=None, mip=None, filter_mode='aut
 
     # Construct a mipmap if necessary.
     if 'mipmap' in filter_mode:
+        mip_wrapper, mip_stack = None, []
         if mip is not None:
-            assert isinstance(mip, _get_plugin().TextureMipWrapper)
+            assert isinstance(mip, (_get_plugin().TextureMipWrapper, list))
+            if isinstance(mip, list):
+                assert all(isinstance(x, torch.Tensor) for x in mip)
+                mip_stack = mip
+            else:
+                mip_wrapper = mip
         else:
-            mip = _get_plugin().texture_construct_mip(tex, max_mip_level, boundary_mode == 'cube')
+            mip_wrapper = _get_plugin().texture_construct_mip(tex, max_mip_level, boundary_mode == 'cube')
 
     # Choose stub.
     if filter_mode == 'linear-mipmap-linear' or filter_mode == 'linear-mipmap-nearest':
-        return _texture_func_mip.apply(filter_mode, tex, uv, uv_da, mip_level_bias, mip, filter_mode_enum, boundary_mode_enum)
+        return _texture_func_mip.apply(filter_mode, tex, uv, uv_da, mip_level_bias, mip_wrapper, filter_mode_enum, boundary_mode_enum, *mip_stack)
     else:
         return _texture_func.apply(filter_mode, tex, uv, filter_mode_enum, boundary_mode_enum)
 

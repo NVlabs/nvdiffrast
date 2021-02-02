@@ -18,7 +18,7 @@ void raiseMipSizeError(NVDR_CTX_ARGS, const TextureKernelParams& p)
     int bufsz = 1024;
 
     std::string msg = "Mip-map size error - cannot downsample an odd extent greater than 1. Resize the texture so that both spatial extents are powers of two, or limit the number of mip maps using max_mip_level argument.\n";
-    
+
     int w = p.texWidth;
     int h = p.texHeight;
     bool ew = false;
@@ -29,7 +29,7 @@ void raiseMipSizeError(NVDR_CTX_ARGS, const TextureKernelParams& p)
     msg +=               "-----  ----- ------\n";
     snprintf(buf, bufsz, "base   %5d  %5d\n", w, h);
     msg += buf;
-    
+
     int mipTotal = 0;
     int level = 0;
     while ((w|h) > 1 && !(ew || eh)) // Stop at first impossible size.
@@ -59,12 +59,11 @@ void raiseMipSizeError(NVDR_CTX_ARGS, const TextureKernelParams& p)
     NVDR_CHECK(0, msg);
 }
 
-int calculateMipInfo(NVDR_CTX_ARGS, TextureKernelParams& p)
+int calculateMipInfo(NVDR_CTX_ARGS, TextureKernelParams& p, int* mipOffsets)
 {
     // No levels at all?
     if (p.mipLevelLimit == 0)
     {
-        p.mipOffset[0] = 0;
         p.mipLevelMax = 0;
         return 0;
     }
@@ -72,14 +71,14 @@ int calculateMipInfo(NVDR_CTX_ARGS, TextureKernelParams& p)
     // Current level size.
     int w = p.texWidth;
     int h = p.texHeight;
-    
-    p.mipOffset[0] = 0;
+
     int mipTotal = 0;
     int level = 0;
     int c = (p.boundaryMode == TEX_BOUNDARY_MODE_CUBE) ? (p.channels * 6) : p.channels;
+    mipOffsets[0] = 0;
     while ((w|h) > 1)
-    {   
-        // Current level.     
+    {
+        // Current level.
         level += 1;
 
         // Quit if cannot downsample.
@@ -90,7 +89,7 @@ int calculateMipInfo(NVDR_CTX_ARGS, TextureKernelParams& p)
         if (w > 1) w >>= 1;
         if (h > 1) h >>= 1;
 
-        p.mipOffset[level] = mipTotal;
+        mipOffsets[level] = mipTotal; // Store the mip offset (#floats).
         mipTotal += w * h * p.texDepth * c;
 
         // Hit the level limit?

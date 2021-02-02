@@ -125,15 +125,18 @@ TextureMipWrapper texture_construct_mip(torch::Tensor tex, int max_mip_level, bo
     p.channels  = tex.size(cube_mode ? 4 : 3);
 
     // Set texture pointer.
-    p.tex = tex.data_ptr<float>();
+    p.tex[0] = tex.data_ptr<float>();
 
-    // Set mip offsets and calculate total size.
-    int mipTotal = calculateMipInfo(NVDR_CTX_PARAMS, p);
+    // Generate mip offsets and calculate total size.
+    int mipOffsets[TEX_MAX_MIP_LEVEL];
+    int mipTotal = calculateMipInfo(NVDR_CTX_PARAMS, p, mipOffsets);
 
     // Allocate and set mip tensor.
     torch::TensorOptions opts = torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCUDA);
     torch::Tensor mip = torch::empty({mipTotal}, opts);
-    p.mip = mip.data_ptr<float>();
+    float* pmip = mip.data_ptr<float>();
+    for (int i=1; i <= p.mipLevelMax; i++)
+        p.tex[i] = pmip + mipOffsets[i]; // Pointers to mip levels.
 
     // Choose kernel variants based on channel count.
     void* args[] = {&p};
@@ -157,24 +160,25 @@ TextureMipWrapper texture_construct_mip(torch::Tensor tex, int max_mip_level, bo
     }
 
     // Return the mip tensor in a wrapper.
-    TextureMipWrapper mip_wrap;
-    mip_wrap.mip = mip;
-    mip_wrap.max_mip_level = max_mip_level;
-    mip_wrap.texture_size = tex.sizes().vec();
-    mip_wrap.cube_mode = cube_mode;
-    return mip_wrap;
+    TextureMipWrapper mip_wrapper;
+    mip_wrapper.mip = mip;
+    mip_wrapper.max_mip_level = max_mip_level;
+    mip_wrapper.texture_size = tex.sizes().vec();
+    mip_wrapper.cube_mode = cube_mode;
+    return mip_wrapper;
 }
 
 //------------------------------------------------------------------------
 // Forward op.
 
-torch::Tensor texture_fwd_mip(torch::Tensor tex, torch::Tensor uv, torch::Tensor uv_da, torch::Tensor mip_level_bias, TextureMipWrapper mip_wrap, int filter_mode, int boundary_mode)
+torch::Tensor texture_fwd_mip(torch::Tensor tex, torch::Tensor uv, torch::Tensor uv_da, torch::Tensor mip_level_bias, TextureMipWrapper mip_wrapper, std::vector<torch::Tensor> mip_stack, int filter_mode, int boundary_mode)
 {
     const at::cuda::OptionalCUDAGuard device_guard(device_of(tex));
     cudaStream_t stream = at::cuda::getCurrentCUDAStream();
     TextureKernelParams p = {}; // Initialize all fields to zero.
-    torch::Tensor& mip = mip_wrap.mip; // Unwrap.
-    int max_mip_level = mip_wrap.max_mip_level;
+    bool has_mip_stack = (mip_stack.size() > 0);
+    torch::Tensor& mip_w = mip_wrapper.mip; // Unwrap.
+    int max_mip_level = has_mip_stack ? mip_stack.size() : mip_wrapper.max_mip_level;
     set_modes(p, filter_mode, boundary_mode, max_mip_level);
 
     // See if we have these tensors or not.
@@ -184,7 +188,7 @@ torch::Tensor texture_fwd_mip(torch::Tensor tex, torch::Tensor uv, torch::Tensor
     if (p.enableMip)
     {
         NVDR_CHECK(has_uv_da || has_mip_level_bias, "mipmapping filter mode requires uv_da and/or mip_level_bias input");
-        NVDR_CHECK(mip.defined(), "mipmapping filter mode requires mip tensor input");
+        NVDR_CHECK(has_mip_stack || mip_w.defined(), "mipmapping filter mode requires mip wrapper or mip stack input");
     }
 
     // Check inputs.
@@ -193,9 +197,18 @@ torch::Tensor texture_fwd_mip(torch::Tensor tex, torch::Tensor uv, torch::Tensor
     NVDR_CHECK_F32(tex, uv);
     if (p.enableMip)
     {
-        NVDR_CHECK_DEVICE(mip);
-        NVDR_CHECK_CONTIGUOUS(mip);
-        NVDR_CHECK_F32(mip);
+        if (has_mip_stack)
+        {
+            TORCH_CHECK(at::cuda::check_device(mip_stack), __func__, "(): Mip stack inputs must reside on the correct GPU device");
+            nvdr_check_contiguous(mip_stack, __func__, "(): Mip stack inputs must be contiguous tensors");
+            nvdr_check_f32(mip_stack, __func__, "(): Mip stack inputs must be float32 tensors");
+        }
+        else
+        {
+            NVDR_CHECK_DEVICE(mip_w);
+            NVDR_CHECK_CONTIGUOUS(mip_w);
+            NVDR_CHECK_F32(mip_w);
+        }
         if (has_uv_da)
         {
             NVDR_CHECK_DEVICE(uv_da);
@@ -249,7 +262,7 @@ torch::Tensor texture_fwd_mip(torch::Tensor tex, torch::Tensor uv, torch::Tensor
     }
 
     // Get input pointers.
-    p.tex = tex.data_ptr<float>();
+    p.tex[0] = tex.data_ptr<float>();
     p.uv = uv.data_ptr<float>();
     p.uvDA = (p.enableMip && has_uv_da) ? uv_da.data_ptr<float>() : NULL;
     p.mipLevelBias = (p.enableMip && has_mip_level_bias) ? mip_level_bias.data_ptr<float>() : NULL;
@@ -268,13 +281,37 @@ torch::Tensor texture_fwd_mip(torch::Tensor tex, torch::Tensor uv, torch::Tensor
         channel_div_idx = 1;  // Channel count divisible by 2.
 
     // Mip-related setup.
+    float* pmip = 0;
     if (p.enableMip)
     {
-        // Generate mip offsets, check mipmap size, and set mip data pointer.
-        int mipTotal = calculateMipInfo(NVDR_CTX_PARAMS, p);
-        NVDR_CHECK(tex.sizes() == mip_wrap.texture_size && cube_mode == mip_wrap.cube_mode, "mip does not match texture size");
-        NVDR_CHECK(mip.sizes().size() == 1 && mip.size(0) == mipTotal, "mip tensor size mismatch");
-        p.mip = mip.data_ptr<float>();
+        if (has_mip_stack)
+        {
+            // Custom mip stack supplied. Check that sizes match and assign.
+            p.mipLevelMax = max_mip_level;
+            for (int i=1; i <= p.mipLevelMax; i++)
+            {
+                torch::Tensor& t = mip_stack[i-1];
+                int2 sz = mipLevelSize(p, i);
+                if (!cube_mode)
+                    NVDR_CHECK(t.sizes().size() == 4 && t.size(0) == tex.size(0) && t.size(1) == sz.y && t.size(2) == sz.x && t.size(3) == p.channels, "mip level size mismatch in custom mip stack");
+                else
+                    NVDR_CHECK(t.sizes().size() == 5 && t.size(0) == tex.size(0) && t.size(1) == 6 && t.size(2) == sz.y && t.size(3) == sz.x && t.size(4) == p.channels, "mip level size mismatch in mip stack");
+                if (sz.x == 1 && sz.y == 1)
+                    NVDR_CHECK(i == p.mipLevelMax, "mip level size mismatch in mip stack");
+                p.tex[i] = t.data_ptr<float>();
+            }
+        }
+        else
+        {
+            // Generate mip offsets, check mipmap size, and set mip data pointer.
+            int mipOffsets[TEX_MAX_MIP_LEVEL];
+            int mipTotal = calculateMipInfo(NVDR_CTX_PARAMS, p, mipOffsets);
+            NVDR_CHECK(tex.sizes() == mip_wrapper.texture_size && cube_mode == mip_wrapper.cube_mode, "mip does not match texture size");
+            NVDR_CHECK(mip_w.sizes().size() == 1 && mip_w.size(0) == mipTotal, "wrapped mip tensor size mismatch");
+            pmip = mip_w.data_ptr<float>();
+            for (int i=1; i <= p.mipLevelMax; i++)
+                p.tex[i] = pmip + mipOffsets[i]; // Pointers to mip levels.
+        }
     }
 
     // Verify that buffers are aligned to allow float2/float4 operations. Unused pointers are zero so always aligned.
@@ -282,15 +319,17 @@ torch::Tensor texture_fwd_mip(torch::Tensor tex, torch::Tensor uv, torch::Tensor
         NVDR_CHECK(!((uintptr_t)p.uv & 7), "uv input tensor not aligned to float2");
     if ((p.channels & 3) == 0)
     {
-        NVDR_CHECK(!((uintptr_t)p.tex & 15), "tex input tensor not aligned to float4");
-        NVDR_CHECK(!((uintptr_t)p.out & 15), "out output tensor not aligned to float4");
-        NVDR_CHECK(!((uintptr_t)p.mip & 15), "mip output tensor not aligned to float4");
+        for (int i=1; 0 <= p.mipLevelMax; i++)
+            NVDR_CHECK(!((uintptr_t)p.tex[i] & 15), "tex or mip input tensor not aligned to float4");
+        NVDR_CHECK(!((uintptr_t)p.out    & 15), "out output tensor not aligned to float4");
+        NVDR_CHECK(!((uintptr_t)pmip     & 15), "mip input tensor not aligned to float4");
     }
     if ((p.channels & 1) == 0)
     {
-        NVDR_CHECK(!((uintptr_t)p.tex & 7), "tex input tensor not aligned to float2");
-        NVDR_CHECK(!((uintptr_t)p.out & 7), "out output tensor not aligned to float2");
-        NVDR_CHECK(!((uintptr_t)p.mip & 7), "mip output tensor not aligned to float2");
+        for (int i=1; 0 <= p.mipLevelMax; i++)
+            NVDR_CHECK(!((uintptr_t)p.tex[i] & 7), "tex or mip input tensor not aligned to float2");
+        NVDR_CHECK(!((uintptr_t)p.out    & 7), "out output tensor not aligned to float2");
+        NVDR_CHECK(!((uintptr_t)pmip     & 7), "mip input tensor not aligned to float2");
     }
     if (!cube_mode)
         NVDR_CHECK(!((uintptr_t)p.uvDA & 15), "uv_da input tensor not aligned to float4");
@@ -372,19 +411,21 @@ torch::Tensor texture_fwd_mip(torch::Tensor tex, torch::Tensor uv, torch::Tensor
 torch::Tensor texture_fwd(torch::Tensor tex, torch::Tensor uv, int filter_mode, int boundary_mode)
 {
     torch::Tensor empty_tensor;
-    return texture_fwd_mip(tex, uv, empty_tensor, empty_tensor, TextureMipWrapper(), filter_mode, boundary_mode);
+    std::vector<torch::Tensor> empty_vector;
+    return texture_fwd_mip(tex, uv, empty_tensor, empty_tensor, TextureMipWrapper(), empty_vector, filter_mode, boundary_mode);
 }
 
 //------------------------------------------------------------------------
 // Gradient op.
 
-std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> texture_grad_linear_mipmap_linear(torch::Tensor tex, torch::Tensor uv, torch::Tensor dy, torch::Tensor uv_da, torch::Tensor mip_level_bias, TextureMipWrapper mip_wrap, int filter_mode, int boundary_mode)
+std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, std::vector<torch::Tensor> > texture_grad_linear_mipmap_linear(torch::Tensor tex, torch::Tensor uv, torch::Tensor dy, torch::Tensor uv_da, torch::Tensor mip_level_bias, TextureMipWrapper mip_wrapper, std::vector<torch::Tensor> mip_stack, int filter_mode, int boundary_mode)
 {
     const at::cuda::OptionalCUDAGuard device_guard(device_of(tex));
     cudaStream_t stream = at::cuda::getCurrentCUDAStream();
     TextureKernelParams p = {}; // Initialize all fields to zero.
-    torch::Tensor& mip = mip_wrap.mip; // Unwrap.
-    int max_mip_level = mip_wrap.max_mip_level;
+    bool has_mip_stack = (mip_stack.size() > 0);
+    torch::Tensor& mip_w = mip_wrapper.mip; // Unwrap.
+    int max_mip_level = has_mip_stack ? mip_stack.size() : mip_wrapper.max_mip_level;
     set_modes(p, filter_mode, boundary_mode, max_mip_level);
 
     // See if we have these tensors or not.
@@ -394,7 +435,7 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> texture_g
     if (p.enableMip)
     {
         NVDR_CHECK(has_uv_da || has_mip_level_bias, "mipmapping filter mode requires uv_da and/or mip_level_bias input");
-        NVDR_CHECK(mip.defined(), "mipmapping filter mode requires mip tensor input");
+        NVDR_CHECK(has_mip_stack || mip_w.defined(), "mipmapping filter mode requires mip wrapper or mip stack input");
     }
 
     // Check inputs.
@@ -403,9 +444,18 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> texture_g
     NVDR_CHECK_F32(tex, uv);
     if (p.enableMip)
     {
-        NVDR_CHECK_DEVICE(mip);
-        NVDR_CHECK_CONTIGUOUS(mip);
-        NVDR_CHECK_F32(mip);
+        if (has_mip_stack)
+        {
+            TORCH_CHECK(at::cuda::check_device(mip_stack), __func__, "(): Mip stack inputs must reside on the correct GPU device");
+            nvdr_check_contiguous(mip_stack, __func__, "(): Mip stack inputs must be contiguous tensors");
+            nvdr_check_f32(mip_stack, __func__, "(): Mip stack inputs must be float32 tensors");
+        }
+        else
+        {
+            NVDR_CHECK_DEVICE(mip_w);
+            NVDR_CHECK_CONTIGUOUS(mip_w);
+            NVDR_CHECK_F32(mip_w);
+        }
         if (has_uv_da)
         {
             NVDR_CHECK_DEVICE(uv_da);
@@ -463,16 +513,15 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> texture_g
     torch::Tensor dy_ = dy.contiguous();
 
     // Get input pointers.
-    p.tex = tex.data_ptr<float>();
+    p.tex[0] = tex.data_ptr<float>();
     p.uv = uv.data_ptr<float>();
     p.dy = dy_.data_ptr<float>();
     p.uvDA = (p.enableMip && has_uv_da) ? uv_da.data_ptr<float>() : NULL;
     p.mipLevelBias = (p.enableMip && has_mip_level_bias) ? mip_level_bias.data_ptr<float>() : NULL;
-    p.mip = p.enableMip ? (float*)mip.data_ptr<float>() : NULL;
 
     // Allocate output tensor for tex gradient.
     torch::Tensor grad_tex = torch::zeros_like(tex);
-    p.gradTex = grad_tex.data_ptr<float>();
+    p.gradTex[0] = grad_tex.data_ptr<float>();
 
     // Allocate output tensor for uv gradient.
     torch::Tensor grad_uv;
@@ -511,14 +560,49 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> texture_g
 
     // Mip-related setup.
     torch::Tensor grad_mip;
+    std::vector<torch::Tensor> grad_mip_stack;
+    float* pmip = 0;
+    float* pgradMip = 0;
     if (p.enableMip)
     {
-        // Generate mip offsets and get space for temporary mip gradients.
-        int mipTotal = calculateMipInfo(NVDR_CTX_PARAMS, p);
-        NVDR_CHECK(tex.sizes() == mip_wrap.texture_size && cube_mode == mip_wrap.cube_mode, "mip does not match texture size");
-        NVDR_CHECK(mip.sizes().size() == 1 && mip.size(0) == mipTotal, "mip tensor size mismatch");
-        grad_mip = torch::zeros_like(mip);
-        p.gradTexMip = grad_mip.data_ptr<float>();
+        if (has_mip_stack)
+        {
+            // Custom mip stack supplied. Check that sizes match, assign, construct gradient tensors.
+            p.mipLevelMax = max_mip_level;
+            for (int i=1; i <= p.mipLevelMax; i++)
+            {
+                torch::Tensor& t = mip_stack[i-1];
+                int2 sz = mipLevelSize(p, i);
+                if (!cube_mode)
+                    NVDR_CHECK(t.sizes().size() == 4 && t.size(0) == tex.size(0) && t.size(1) == sz.y && t.size(2) == sz.x && t.size(3) == p.channels, "mip level size mismatch in mip stack");
+                else
+                    NVDR_CHECK(t.sizes().size() == 5 && t.size(0) == tex.size(0) && t.size(1) == 6 && t.size(2) == sz.y && t.size(3) == sz.x && t.size(4) == p.channels, "mip level size mismatch in mip stack");
+                if (sz.x == 1 && sz.y == 1)
+                    NVDR_CHECK(i == p.mipLevelMax, "mip level size mismatch in mip stack");
+
+                torch::Tensor g = torch::zeros_like(t);
+                grad_mip_stack.push_back(g);
+
+                p.tex[i] = t.data_ptr<float>();
+                p.gradTex[i] = g.data_ptr<float>();
+            }
+        }
+        else
+        {
+            // Generate mip offsets and get space for temporary mip gradients.
+            int mipOffsets[TEX_MAX_MIP_LEVEL];
+            int mipTotal = calculateMipInfo(NVDR_CTX_PARAMS, p, mipOffsets);
+            NVDR_CHECK(tex.sizes() == mip_wrapper.texture_size && cube_mode == mip_wrapper.cube_mode, "mip does not match texture size");
+            NVDR_CHECK(mip_w.sizes().size() == 1 && mip_w.size(0) == mipTotal, "mip tensor size mismatch");
+            grad_mip = torch::zeros_like(mip_w);
+            pmip = (float*)mip_w.data_ptr<float>();
+            pgradMip = grad_mip.data_ptr<float>();
+            for (int i=1; i <= p.mipLevelMax; i++)
+            {
+                p.tex[i] = pmip + mipOffsets[i]; // Pointers to mip levels.
+                p.gradTex[i] = pgradMip + mipOffsets[i]; // Pointers to mip gradients.
+            }
+        }
     }
 
     // Verify that buffers are aligned to allow float2/float4 operations. Unused pointers are zero so always aligned.
@@ -536,17 +620,25 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> texture_g
     }
     if ((p.channels & 3) == 0)
     {
-        NVDR_CHECK(!((uintptr_t)p.tex     & 15), "tex input tensor not aligned to float4");
-        NVDR_CHECK(!((uintptr_t)p.gradTex & 15), "grad_tex output tensor not aligned to float4");
-        NVDR_CHECK(!((uintptr_t)p.dy      & 15), "dy input tensor not aligned to float4");
-        NVDR_CHECK(!((uintptr_t)p.mip     & 15), "mip input tensor not aligned to float4");
+        for (int i=0; i <= p.mipLevelMax; i++)
+        {
+            NVDR_CHECK(!((uintptr_t)p.tex[i]     & 15), "tex or mip input tensor not aligned to float4");
+            NVDR_CHECK(!((uintptr_t)p.gradTex[i] & 15), "grad_tex output tensor not aligned to float4");
+        }
+        NVDR_CHECK(!((uintptr_t)p.dy         & 15), "dy input tensor not aligned to float4");
+        NVDR_CHECK(!((uintptr_t)pmip         & 15), "mip input tensor not aligned to float4");
+        NVDR_CHECK(!((uintptr_t)pgradMip     & 15), "internal mip gradient tensor not aligned to float4");
     }
     if ((p.channels & 1) == 0)
     {
-        NVDR_CHECK(!((uintptr_t)p.tex     & 7), "tex input tensor not aligned to float2");
-        NVDR_CHECK(!((uintptr_t)p.gradTex & 7), "grad_tex output tensor not aligned to float2");
-        NVDR_CHECK(!((uintptr_t)p.dy      & 7), "dy output tensor not aligned to float2");
-        NVDR_CHECK(!((uintptr_t)p.mip     & 7), "mip input tensor not aligned to float2");
+        for (int i=0; i <= p.mipLevelMax; i++)
+        {
+            NVDR_CHECK(!((uintptr_t)p.tex[i]     & 7), "tex or mip input tensor not aligned to float2");
+            NVDR_CHECK(!((uintptr_t)p.gradTex[i] & 7), "grad_tex output tensor not aligned to float2");
+        }
+         NVDR_CHECK(!((uintptr_t)p.dy         & 7), "dy output tensor not aligned to float2");
+        NVDR_CHECK(!((uintptr_t)pmip         & 7), "mip input tensor not aligned to float2");
+        NVDR_CHECK(!((uintptr_t)pgradMip     & 7), "internal mip gradient tensor not aligned to float2");
     }
 
     // Choose launch parameters for main gradient kernel.
@@ -583,8 +675,8 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> texture_g
     // Launch main gradient kernel.
     NVDR_CHECK_CUDA_ERROR(cudaLaunchKernel(func_tbl[func_idx], gridSize, blockSize, args, 0, stream));
 
-    // Launch kernel to pull gradients from mip levels.
-    if (p.enableMip)
+    // Launch kernel to pull gradients from mip levels. Don't do this if mip stack was supplied - individual level gradients are already there.
+    if (p.enableMip && !has_mip_stack)
     {
         dim3 blockSize = getLaunchBlockSize(TEX_GRAD_MAX_MIP_KERNEL_BLOCK_WIDTH, TEX_GRAD_MAX_MIP_KERNEL_BLOCK_HEIGHT, p.texWidth, p.texHeight);
         dim3 gridSize  = getLaunchGridSize(blockSize, p.texWidth, p.texHeight, p.texDepth * (cube_mode ? 6 : 1));
@@ -595,14 +687,15 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> texture_g
     }
 
     // Return output tensors.
-    return std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>(grad_tex, grad_uv, grad_uv_da, grad_mip_level_bias);
+    return std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, std::vector<torch::Tensor> >(grad_tex, grad_uv, grad_uv_da, grad_mip_level_bias, grad_mip_stack);
 }
 
 // Version for nearest filter mode.
 torch::Tensor texture_grad_nearest(torch::Tensor tex, torch::Tensor uv, torch::Tensor dy, int filter_mode, int boundary_mode)
 {
     torch::Tensor empty_tensor;
-    std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> result = texture_grad_linear_mipmap_linear(tex, uv, dy, empty_tensor, empty_tensor, TextureMipWrapper(), filter_mode, boundary_mode);
+    std::vector<torch::Tensor> empty_vector;
+    std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, std::vector<torch::Tensor> > result = texture_grad_linear_mipmap_linear(tex, uv, dy, empty_tensor, empty_tensor, TextureMipWrapper(), empty_vector, filter_mode, boundary_mode);
     return std::get<0>(result);
 }
 
@@ -610,15 +703,16 @@ torch::Tensor texture_grad_nearest(torch::Tensor tex, torch::Tensor uv, torch::T
 std::tuple<torch::Tensor, torch::Tensor> texture_grad_linear(torch::Tensor tex, torch::Tensor uv, torch::Tensor dy, int filter_mode, int boundary_mode)
 {
     torch::Tensor empty_tensor;
-    std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> result = texture_grad_linear_mipmap_linear(tex, uv, dy, empty_tensor, empty_tensor, TextureMipWrapper(), filter_mode, boundary_mode);
+    std::vector<torch::Tensor> empty_vector;
+    std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, std::vector<torch::Tensor> > result = texture_grad_linear_mipmap_linear(tex, uv, dy, empty_tensor, empty_tensor, TextureMipWrapper(), empty_vector, filter_mode, boundary_mode);
     return std::tuple<torch::Tensor, torch::Tensor>(std::get<0>(result), std::get<1>(result));
 }
 
 // Version for linear-mipmap-nearest mode.
-std::tuple<torch::Tensor, torch::Tensor> texture_grad_linear_mipmap_nearest(torch::Tensor tex, torch::Tensor uv, torch::Tensor dy, torch::Tensor uv_da, torch::Tensor mip_level_bias, TextureMipWrapper mip, int filter_mode, int boundary_mode)
+std::tuple<torch::Tensor, torch::Tensor, std::vector<torch::Tensor> > texture_grad_linear_mipmap_nearest(torch::Tensor tex, torch::Tensor uv, torch::Tensor dy, torch::Tensor uv_da, torch::Tensor mip_level_bias, TextureMipWrapper mip_wrapper, std::vector<torch::Tensor> mip_stack, int filter_mode, int boundary_mode)
 {
-    std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor> result = texture_grad_linear_mipmap_linear(tex, uv, dy, uv_da, mip_level_bias, mip, filter_mode, boundary_mode);
-    return std::tuple<torch::Tensor, torch::Tensor>(std::get<0>(result), std::get<1>(result));
+    std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, std::vector<torch::Tensor> > result = texture_grad_linear_mipmap_linear(tex, uv, dy, uv_da, mip_level_bias, mip_wrapper, mip_stack, filter_mode, boundary_mode);
+    return std::tuple<torch::Tensor, torch::Tensor, std::vector<torch::Tensor> >(std::get<0>(result), std::get<1>(result), std::get<4>(result));
 }
 
 //------------------------------------------------------------------------
