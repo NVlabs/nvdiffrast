@@ -28,7 +28,7 @@ def _get_plugin():
         lib_dir = os.path.dirname(__file__) + r"\..\lib"
         def find_cl_path():
             import glob
-            for edition in ['Professional', 'BuildTools', 'Community']:
+            for edition in ['Enterprise', 'Professional', 'BuildTools', 'Community']:
                 paths = sorted(glob.glob(r"C:\Program Files (x86)\Microsoft Visual Studio\*\%s\VC\Tools\MSVC\*\bin\Hostx64\x64" % edition), reverse=True)
                 if paths:
                     return paths[0]
@@ -389,12 +389,15 @@ def texture(tex, uv, uv_da=None, mip_level_bias=None, mip=None, filter_mode='aut
                as long.
         mip_level_bias: (Optional) Per-pixel bias for mip level selection. If `uv_da` is omitted,
                         determines mip level directly. Must have shape [minibatch_size, height, width].
-        mip: (Optional) Preconstructed mipmap stack from a `texture_construct_mip()` call or a list
-                        of tensors specifying a custom mipmap stack. Gradients of a custom mipmap stack
-                        are not automatically propagated to base texture but the mipmap tensors will
-                        receive gradients of their own. If a mipmap stack is not specified but the chosen
-                        filter mode requires it, the mipmap stack is constructed internally and
-                        discarded afterwards.
+        mip: (Optional) Preconstructed mipmap stack from a `texture_construct_mip()` call, or a list
+                        of tensors specifying a custom mipmap stack. When specifying a custom mipmap stack,
+                        the tensors in the list must follow the same format as `tex` except for width and
+                        height that must follow the usual rules for mipmap sizes. The base level texture
+                        is still supplied in `tex` and must not be included in the list. Gradients of a
+                        custom mipmap stack are not automatically propagated to base texture but the mipmap
+                        tensors will receive gradients of their own. If a mipmap stack is not specified
+                        but the chosen filter mode requires it, the mipmap stack is constructed internally
+                        and discarded afterwards.
         filter_mode: Texture filtering mode to be used. Valid values are 'auto', 'nearest',
                      'linear', 'linear-mipmap-nearest', and 'linear-mipmap-linear'. Mode 'auto'
                      selects 'linear' if neither `uv_da` or `mip_level_bias` is specified, and

@@ -42,7 +42,7 @@ using namespace tensorflow::shape_inference;
 #define NVDR_CTX_ARGS int _nvdr_ctx_dummy
 #define NVDR_CTX_PARAMS 0
 #define NVDR_CHECK(COND, ERR) do { TORCH_CHECK(COND, ERR) } while(0)
-#define NVDR_CHECK_CUDA_ERROR(CUDA_CALL) do { cudaError_t err = CUDA_CALL; AT_CUDA_CHECK(cudaGetLastError()); } while(0)
+#define NVDR_CHECK_CUDA_ERROR(CUDA_CALL) do { cudaError_t err = CUDA_CALL; TORCH_CHECK(err == CUDA_SUCCESS, "Cuda error: ", cudaGetLastError(), "[", #CUDA_CALL, ";]"); } while(0)
 #define NVDR_CHECK_GL_ERROR(GL_CALL) do { GL_CALL; GLenum err = glGetError(); TORCH_CHECK(err == GL_NO_ERROR, "OpenGL error: ", getGLErrorString(err), "[", #GL_CALL, ";]"); } while(0)
 #endif
 

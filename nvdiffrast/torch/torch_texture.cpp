@@ -319,14 +319,14 @@ torch::Tensor texture_fwd_mip(torch::Tensor tex, torch::Tensor uv, torch::Tensor
         NVDR_CHECK(!((uintptr_t)p.uv & 7), "uv input tensor not aligned to float2");
     if ((p.channels & 3) == 0)
     {
-        for (int i=1; 0 <= p.mipLevelMax; i++)
+        for (int i=0; i <= p.mipLevelMax; i++)
             NVDR_CHECK(!((uintptr_t)p.tex[i] & 15), "tex or mip input tensor not aligned to float4");
         NVDR_CHECK(!((uintptr_t)p.out    & 15), "out output tensor not aligned to float4");
         NVDR_CHECK(!((uintptr_t)pmip     & 15), "mip input tensor not aligned to float4");
     }
     if ((p.channels & 1) == 0)
     {
-        for (int i=1; 0 <= p.mipLevelMax; i++)
+        for (int i=0; i <= p.mipLevelMax; i++)
             NVDR_CHECK(!((uintptr_t)p.tex[i] & 7), "tex or mip input tensor not aligned to float2");
         NVDR_CHECK(!((uintptr_t)p.out    & 7), "out output tensor not aligned to float2");
         NVDR_CHECK(!((uintptr_t)pmip     & 7), "mip input tensor not aligned to float2");

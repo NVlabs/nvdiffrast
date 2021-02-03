@@ -901,12 +901,15 @@ must have shape [minibatch_size, height, width, 2]. When sampling a cube map
 texture, must have shape [minibatch_size, height, width, 3].</td></tr><tr class="arg"><td class="argname">uv_da</td><td class="arg_short">(Optional) Tensor containing image-space derivatives of texture coordinates.
 Must have same shape as <code>uv</code> except for the last dimension that is to be twice
 as long.</td></tr><tr class="arg"><td class="argname">mip_level_bias</td><td class="arg_short">(Optional) Per-pixel bias for mip level selection. If <code>uv_da</code> is omitted,
-determines mip level directly. Must have shape [minibatch_size, height, width].</td></tr><tr class="arg"><td class="argname">mip</td><td class="arg_short">(Optional) Preconstructed mipmap stack from a <code>texture_construct_mip()</code> call or a list
-of tensors specifying a custom mipmap stack. Gradients of a custom mipmap stack
-are not automatically propagated to base texture but the mipmap tensors will
-receive gradients of their own. If a mipmap stack is not specified but the chosen
-filter mode requires it, the mipmap stack is constructed internally and
-discarded afterwards.</td></tr><tr class="arg"><td class="argname">filter_mode</td><td class="arg_short">Texture filtering mode to be used. Valid values are 'auto', 'nearest',
+determines mip level directly. Must have shape [minibatch_size, height, width].</td></tr><tr class="arg"><td class="argname">mip</td><td class="arg_short">(Optional) Preconstructed mipmap stack from a <code>texture_construct_mip()</code> call, or a list
+of tensors specifying a custom mipmap stack. When specifying a custom mipmap stack,
+the tensors in the list must follow the same format as <code>tex</code> except for width and
+height that must follow the usual rules for mipmap sizes. The base level texture
+is still supplied in <code>tex</code> and must not be included in the list. Gradients of a
+custom mipmap stack are not automatically propagated to base texture but the mipmap
+tensors will receive gradients of their own. If a mipmap stack is not specified
+but the chosen filter mode requires it, the mipmap stack is constructed internally
+and discarded afterwards.</td></tr><tr class="arg"><td class="argname">filter_mode</td><td class="arg_short">Texture filtering mode to be used. Valid values are 'auto', 'nearest',
 'linear', 'linear-mipmap-nearest', and 'linear-mipmap-linear'. Mode 'auto'
 selects 'linear' if neither <code>uv_da</code> or <code>mip_level_bias</code> is specified, and
 'linear-mipmap-linear' when at least one of them is specified, these being
