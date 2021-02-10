@@ -148,6 +148,7 @@ class RasterizeGLContext:
             with torch.cuda.device(device):
                 cuda_device_idx = torch.cuda.current_device()
         self.cpp_wrapper = _get_plugin().RasterizeGLStateWrapper(output_db, mode == 'automatic', cuda_device_idx)
+        self.active_depth_peeler = None # For error checking only
 
     def set_context(self):
         '''Set (activate) OpenGL context in the current CPU thread.
@@ -169,8 +170,8 @@ class RasterizeGLContext:
 
 class _rasterize_func(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, glctx, pos, tri, resolution, ranges, grad_db):
-        out, out_db = _get_plugin().rasterize_fwd(glctx.cpp_wrapper, pos, tri, resolution, ranges)
+    def forward(ctx, glctx, pos, tri, resolution, ranges, grad_db, peeling_idx):
+        out, out_db = _get_plugin().rasterize_fwd(glctx.cpp_wrapper, pos, tri, resolution, ranges, peeling_idx)
         ctx.save_for_backward(pos, tri, out)
         ctx.saved_grad_db = grad_db
         return out, out_db
@@ -182,14 +183,14 @@ class _rasterize_func(torch.autograd.Function):
             g_pos = _get_plugin().rasterize_grad_db(pos, tri, out, dy, ddb)
         else:
             g_pos = _get_plugin().rasterize_grad(pos, tri, out, dy)
-        return None, g_pos, None, None, None, None
+        return None, g_pos, None, None, None, None, None
 
 # Op wrapper.
 def rasterize(glctx, pos, tri, resolution, ranges=None, grad_db=True):
     '''Rasterize triangles.
 
     All input tensors must be contiguous and reside in GPU memory except for
-    the `ranges` tensor that, if specified, has to reside in CPU memory. The 
+    the `ranges` tensor that, if specified, has to reside in CPU memory. The
     output tensors will be contiguous and reside in GPU memory.
 
     Args:
@@ -199,7 +200,7 @@ def rasterize(glctx, pos, tri, resolution, ranges=None, grad_db=True):
              instanced mode, use a 3D shape [minibatch_size, num_vertices, 4].
         tri: Triangle tensor with shape [num_triangles, 3] and dtype `torch.int32`.
         resolution: Output resolution as integer tuple (height, width).
-        ranges: In range mode, tensor with shape [minibatch_size, 2] and dtype 
+        ranges: In range mode, tensor with shape [minibatch_size, 2] and dtype
                 `torch.int32`, specifying start indices and counts into `tri`.
                 Ignored in instanced mode.
         grad_db: Propagate gradients of image-space derivatives of barycentrics
@@ -207,7 +208,7 @@ def rasterize(glctx, pos, tri, resolution, ranges=None, grad_db=True):
                  not configured to output image-space derivatives.
 
     Returns:
-        A tuple of two tensors. The first output tensor has shape [minibatch_size, 
+        A tuple of two tensors. The first output tensor has shape [minibatch_size,
         height, width, 4] and contains the main rasterizer output in order (u, v, z/w,
         triangle_id). If the OpenGL context was configured to output image-space
         derivatives of barycentrics, the second output tensor will also have shape
@@ -227,8 +228,82 @@ def rasterize(glctx, pos, tri, resolution, ranges=None, grad_db=True):
     else:
         assert isinstance(ranges, torch.Tensor)
 
+    # Check that context is not currently reserved for depth peeling.
+    if glctx.active_depth_peeler is not None:
+        return RuntimeError("Cannot call rasterize() during depth peeling operation, use rasterize_next_layer() instead")
+
     # Instantiate the function.
-    return _rasterize_func.apply(glctx, pos, tri, resolution, ranges, grad_db)
+    return _rasterize_func.apply(glctx, pos, tri, resolution, ranges, grad_db, -1)
+
+#----------------------------------------------------------------------------
+# Depth peeler context manager for rasterizing multiple depth layers.
+#----------------------------------------------------------------------------
+
+class DepthPeeler:
+    def __init__(self, glctx, pos, tri, resolution, ranges=None, grad_db=True):
+        '''Create a depth peeler object for rasterizing multiple depth layers.
+
+        Arguments are the same as in `rasterize()`.
+
+        Returns:
+          The newly created depth peeler.
+        '''
+        assert isinstance(glctx, RasterizeGLContext)
+        assert grad_db is True or grad_db is False
+        grad_db = grad_db and glctx.output_db
+
+        # Sanitize inputs as usual.
+        assert isinstance(pos, torch.Tensor) and isinstance(tri, torch.Tensor)
+        resolution = tuple(resolution)
+        if ranges is None:
+            ranges = torch.empty(size=(0, 2), dtype=torch.int32, device='cpu')
+        else:
+            assert isinstance(ranges, torch.Tensor)
+
+        # Store all the parameters.
+        self.glctx = glctx
+        self.pos = pos
+        self.tri = tri
+        self.resolution = resolution
+        self.ranges = ranges
+        self.grad_db = grad_db
+        self.peeling_idx = None
+
+    def __enter__(self):
+        if self.glctx is None:
+            raise RuntimeError("Cannot re-enter a terminated depth peeling operation")
+        if self.glctx.active_depth_peeler is not None:
+            raise RuntimeError("Cannot have multiple depth peelers active simultaneously in a RasterizeGLContext")
+        self.glctx.active_depth_peeler = self
+        self.peeling_idx = 0
+        return self
+
+    def __exit__(self, *args):
+        assert self.glctx.active_depth_peeler is self
+        self.glctx.active_depth_peeler = None
+        self.glctx = None # Remove all references to input tensor so they're not left dangling.
+        self.pos = None
+        self.tri = None
+        self.resolution = None
+        self.ranges = None
+        self.grad_db = None
+        self.peeling_idx = None
+        return None
+
+    def rasterize_next_layer(self):
+        '''Rasterize next depth layer.
+
+        Operation is equivalent to `rasterize()` except that previously reported
+        surface points are culled away.
+
+        Returns:
+          A tuple of two tensors as in `rasterize()`.
+        '''
+        assert self.glctx.active_depth_peeler is self
+        assert self.peeling_idx >= 0
+        result = _rasterize_func.apply(self.glctx, self.pos, self.tri, self.resolution, self.ranges, self.grad_db, self.peeling_idx)
+        self.peeling_idx += 1
+        return result
 
 #----------------------------------------------------------------------------
 # Interpolate.

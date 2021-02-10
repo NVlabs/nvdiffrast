@@ -20,7 +20,7 @@
 #define OP_RETURN_TTV   std::tuple<torch::Tensor, torch::Tensor, std::vector<torch::Tensor> >
 #define OP_RETURN_TTTTV std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, std::vector<torch::Tensor> >
 
-OP_RETURN_TT        rasterize_fwd                       (RasterizeGLStateWrapper& stateWrapper, torch::Tensor pos, torch::Tensor tri, std::tuple<int, int> resolution, torch::Tensor ranges);
+OP_RETURN_TT        rasterize_fwd                       (RasterizeGLStateWrapper& stateWrapper, torch::Tensor pos, torch::Tensor tri, std::tuple<int, int> resolution, torch::Tensor ranges, int depth_idx);
 OP_RETURN_T         rasterize_grad                      (torch::Tensor pos, torch::Tensor tri, torch::Tensor out, torch::Tensor dy);
 OP_RETURN_T         rasterize_grad_db                   (torch::Tensor pos, torch::Tensor tri, torch::Tensor out, torch::Tensor dy, torch::Tensor ddb);
 OP_RETURN_TT        interpolate_fwd                     (torch::Tensor attr, torch::Tensor rast, torch::Tensor tri);

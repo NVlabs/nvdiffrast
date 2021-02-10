@@ -51,7 +51,7 @@ void RasterizeGLStateWrapper::releaseContext(void)
 //------------------------------------------------------------------------
 // Forward op.
 
-std::tuple<torch::Tensor, torch::Tensor> rasterize_fwd(RasterizeGLStateWrapper& stateWrapper, torch::Tensor pos, torch::Tensor tri, std::tuple<int, int> resolution, torch::Tensor ranges)
+std::tuple<torch::Tensor, torch::Tensor> rasterize_fwd(RasterizeGLStateWrapper& stateWrapper, torch::Tensor pos, torch::Tensor tri, std::tuple<int, int> resolution, torch::Tensor ranges, int peeling_idx)
 {
     const at::cuda::OptionalCUDAGuard device_guard(device_of(pos));
     cudaStream_t stream = at::cuda::getCurrentCUDAStream();
@@ -103,7 +103,7 @@ std::tuple<torch::Tensor, torch::Tensor> rasterize_fwd(RasterizeGLStateWrapper& 
     const int32_t* rangesPtr = instance_mode ? 0 : ranges.data_ptr<int32_t>(); // This is in CPU memory.
     const int32_t* triPtr = tri.data_ptr<int32_t>();
     int vtxPerInstance = instance_mode ? pos.size(1) : 0;
-    rasterizeRender(NVDR_CTX_PARAMS, s, stream, posPtr, posCount, vtxPerInstance, triPtr, triCount, rangesPtr, width, height, depth);
+    rasterizeRender(NVDR_CTX_PARAMS, s, stream, posPtr, posCount, vtxPerInstance, triPtr, triCount, rangesPtr, width, height, depth, peeling_idx);
 
     // Allocate output tensors.
     torch::TensorOptions opts = torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCUDA);

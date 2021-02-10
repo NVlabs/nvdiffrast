@@ -191,6 +191,29 @@ void rasterizeInitGLContext(NVDR_CTX_ARGS, RasterizeGLState& s, int cudaDeviceId
                 }
             )
         );
+
+        // Set up fragment shader for depth peeling.
+        compileGLShader(NVDR_CTX_PARAMS, &s.glFragmentShaderDP, GL_FRAGMENT_SHADER,
+            "#version 430\n"
+            STRINGIFY_SHADER_SOURCE(
+                in vec4 var_uvzw;
+                in vec4 var_db;
+                in int gl_Layer;
+                in int gl_PrimitiveID;
+                layout(binding = 0) uniform sampler2DArray out_prev;
+                layout(location = 0) out vec4 out_raster;
+                layout(location = 1) out vec4 out_db;
+                void main()
+                {
+                    vec4 prev = texelFetch(out_prev, ivec3(gl_FragCoord.x, gl_FragCoord.y, gl_Layer), 0);
+                    float depth_new = var_uvzw.z / var_uvzw.w;
+                    if (prev.w == 0 || depth_new <= prev.z)
+                        discard;
+                    out_raster = vec4(var_uvzw.x, var_uvzw.y, depth_new, float(gl_PrimitiveID + 1));
+                    out_db = var_db * var_uvzw.w;
+                }
+            )
+        );
     }
     else
     {
@@ -228,10 +251,31 @@ void rasterizeInitGLContext(NVDR_CTX_ARGS, RasterizeGLState& s, int cudaDeviceId
                 }
             )
         );
+
+        // Depth peeling variant of fragment shader.
+        compileGLShader(NVDR_CTX_PARAMS, &s.glFragmentShaderDP, GL_FRAGMENT_SHADER,
+            "#version 430\n"
+            STRINGIFY_SHADER_SOURCE(
+                in vec4 var_uvzw;
+                in int gl_Layer;
+                in int gl_PrimitiveID;
+                layout(binding = 0) uniform sampler2DArray out_prev;
+                layout(location = 0) out vec4 out_raster;
+                void main()
+                {
+                    vec4 prev = texelFetch(out_prev, ivec3(gl_FragCoord.x, gl_FragCoord.y, gl_Layer), 0);
+                    float depth_new = var_uvzw.z / var_uvzw.w;
+                    if (prev.w == 0 || depth_new <= prev.z)
+                        discard;
+                    out_raster = vec4(var_uvzw.x, var_uvzw.y, var_uvzw.z / var_uvzw.w, float(gl_PrimitiveID + 1));
+                }
+            )
+        );
     }
 
-    // Finalize program.
+    // Finalize programs.
     constructGLProgram(NVDR_CTX_PARAMS, &s.glProgram, s.glVertexShader, s.glGeometryShader, s.glFragmentShader);
+    constructGLProgram(NVDR_CTX_PARAMS, &s.glProgramDP, s.glVertexShader, s.glGeometryShader, s.glFragmentShaderDP);
 
     // Construct main fbo and bind permanently.
     NVDR_CHECK_GL_ERROR(glGenFramebuffers(1, &s.glFBO));
@@ -255,11 +299,6 @@ void rasterizeInitGLContext(NVDR_CTX_ARGS, RasterizeGLState& s, int cudaDeviceId
     NVDR_CHECK_GL_ERROR(glGenBuffers(1, &s.glTriBuffer));
     NVDR_CHECK_GL_ERROR(glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, s.glTriBuffer));
 
-    // Bind color outputs and activate program.
-    NVDR_CHECK_GL_ERROR(glBindFragDataLocation(s.glProgram, 0, "out_raster"));
-    NVDR_CHECK_GL_ERROR(glBindFragDataLocation(s.glProgram, 1, "out_db"));
-    NVDR_CHECK_GL_ERROR(glUseProgram(s.glProgram));
-
     // Set up depth test.
     NVDR_CHECK_GL_ERROR(glEnable(GL_DEPTH_TEST));
     NVDR_CHECK_GL_ERROR(glDepthFunc(GL_LESS));
@@ -277,6 +316,9 @@ void rasterizeInitGLContext(NVDR_CTX_ARGS, RasterizeGLState& s, int cudaDeviceId
     NVDR_CHECK_GL_ERROR(glGenTextures(1, &s.glDepthStencilBuffer));
     NVDR_CHECK_GL_ERROR(glBindTexture(GL_TEXTURE_2D_ARRAY, s.glDepthStencilBuffer));
     NVDR_CHECK_GL_ERROR(glFramebufferTexture(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, s.glDepthStencilBuffer, 0));
+
+    // Create texture name for previous output buffer (depth peeling).
+    NVDR_CHECK_GL_ERROR(glGenTextures(1, &s.glPrevOutBuffer));
 }
 
 void rasterizeResizeBuffers(NVDR_CTX_ARGS, RasterizeGLState& s, int posCount, int triCount, int width, int height, int depth)
@@ -311,6 +353,12 @@ void rasterizeResizeBuffers(NVDR_CTX_ARGS, RasterizeGLState& s, int posCount, in
             for (int i=0; i < num_outputs; i++)
                 NVDR_CHECK_CUDA_ERROR(cudaGraphicsUnregisterResource(s.cudaColorBuffer[i]));
 
+        if (s.cudaPrevOutBuffer)
+        {
+            NVDR_CHECK_CUDA_ERROR(cudaGraphicsUnregisterResource(s.cudaPrevOutBuffer));
+            s.cudaPrevOutBuffer = 0;
+        }
+
         // New framebuffer size.
         s.width  = (width > s.width) ? width : s.width;
         s.height = (height > s.height) ? height : s.height;
@@ -324,6 +372,10 @@ void rasterizeResizeBuffers(NVDR_CTX_ARGS, RasterizeGLState& s, int posCount, in
         {
             NVDR_CHECK_GL_ERROR(glBindTexture(GL_TEXTURE_2D_ARRAY, s.glColorBuffer[i]));
             NVDR_CHECK_GL_ERROR(glTexImage3D(GL_TEXTURE_2D_ARRAY, 0, GL_RGBA32F, s.width, s.height, s.depth, 0, GL_RGBA, GL_UNSIGNED_BYTE, 0));
+            NVDR_CHECK_GL_ERROR(glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, GL_NEAREST));
+            NVDR_CHECK_GL_ERROR(glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_NEAREST));
+            NVDR_CHECK_GL_ERROR(glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE));
+            NVDR_CHECK_GL_ERROR(glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE));
         }
 
         // Allocate depth/stencil buffer.
@@ -344,34 +396,79 @@ void rasterizeResizeBuffers(NVDR_CTX_ARGS, RasterizeGLState& s, int posCount, in
     }
 }
 
-void rasterizeRender(NVDR_CTX_ARGS, RasterizeGLState& s, cudaStream_t stream, const float* posPtr, int posCount, int vtxPerInstance, const int32_t* triPtr, int triCount, const int32_t* rangesPtr, int width, int height, int depth)
+void rasterizeRender(NVDR_CTX_ARGS, RasterizeGLState& s, cudaStream_t stream, const float* posPtr, int posCount, int vtxPerInstance, const int32_t* triPtr, int triCount, const int32_t* rangesPtr, int width, int height, int depth, int peeling_idx)
 {
-    if (triPtr)
+    // Only copy inputs if we are on first iteration of depth peeling or not doing it at all.
+    if (peeling_idx < 1)
     {
-        // Copy both position and triangle buffers.
-        void* glPosPtr = NULL;
-        void* glTriPtr = NULL;
-        size_t posBytes = 0;
-        size_t triBytes = 0;
-        NVDR_CHECK_CUDA_ERROR(cudaGraphicsMapResources(2, &s.cudaPosBuffer, stream));
-        NVDR_CHECK_CUDA_ERROR(cudaGraphicsResourceGetMappedPointer(&glPosPtr, &posBytes, s.cudaPosBuffer));
-        NVDR_CHECK_CUDA_ERROR(cudaGraphicsResourceGetMappedPointer(&glTriPtr, &triBytes, s.cudaTriBuffer));
-        NVDR_CHECK(posBytes >= posCount * sizeof(float), "mapped GL position buffer size mismatch");
-        NVDR_CHECK(triBytes >= triCount * sizeof(int32_t), "mapped GL triangle buffer size mismatch");
-        NVDR_CHECK_CUDA_ERROR(cudaMemcpyAsync(glPosPtr, posPtr, posCount * sizeof(float), cudaMemcpyDeviceToDevice, stream));
-        NVDR_CHECK_CUDA_ERROR(cudaMemcpyAsync(glTriPtr, triPtr, triCount * sizeof(int32_t), cudaMemcpyDeviceToDevice, stream));
-        NVDR_CHECK_CUDA_ERROR(cudaGraphicsUnmapResources(2, &s.cudaPosBuffer, stream));
+        if (triPtr)
+        {
+            // Copy both position and triangle buffers.
+            void* glPosPtr = NULL;
+            void* glTriPtr = NULL;
+            size_t posBytes = 0;
+            size_t triBytes = 0;
+            NVDR_CHECK_CUDA_ERROR(cudaGraphicsMapResources(2, &s.cudaPosBuffer, stream));
+            NVDR_CHECK_CUDA_ERROR(cudaGraphicsResourceGetMappedPointer(&glPosPtr, &posBytes, s.cudaPosBuffer));
+            NVDR_CHECK_CUDA_ERROR(cudaGraphicsResourceGetMappedPointer(&glTriPtr, &triBytes, s.cudaTriBuffer));
+            NVDR_CHECK(posBytes >= posCount * sizeof(float), "mapped GL position buffer size mismatch");
+            NVDR_CHECK(triBytes >= triCount * sizeof(int32_t), "mapped GL triangle buffer size mismatch");
+            NVDR_CHECK_CUDA_ERROR(cudaMemcpyAsync(glPosPtr, posPtr, posCount * sizeof(float), cudaMemcpyDeviceToDevice, stream));
+            NVDR_CHECK_CUDA_ERROR(cudaMemcpyAsync(glTriPtr, triPtr, triCount * sizeof(int32_t), cudaMemcpyDeviceToDevice, stream));
+            NVDR_CHECK_CUDA_ERROR(cudaGraphicsUnmapResources(2, &s.cudaPosBuffer, stream));
+        }
+        else
+        {
+            // Copy position buffer only. Triangles are already copied and known to be constant.
+            void* glPosPtr = NULL;
+            size_t posBytes = 0;
+            NVDR_CHECK_CUDA_ERROR(cudaGraphicsMapResources(1, &s.cudaPosBuffer, stream));
+            NVDR_CHECK_CUDA_ERROR(cudaGraphicsResourceGetMappedPointer(&glPosPtr, &posBytes, s.cudaPosBuffer));
+            NVDR_CHECK(posBytes >= posCount * sizeof(float), "mapped GL position buffer size mismatch");
+            NVDR_CHECK_CUDA_ERROR(cudaMemcpyAsync(glPosPtr, posPtr, posCount * sizeof(float), cudaMemcpyDeviceToDevice, stream));
+            NVDR_CHECK_CUDA_ERROR(cudaGraphicsUnmapResources(1, &s.cudaPosBuffer, stream));
+        }
+    }
+
+    // Select program based on whether we have a depth peeling input or not.
+    if (peeling_idx < 1)
+    {
+        // Normal case: No peeling, or peeling disabled.
+        NVDR_CHECK_GL_ERROR(glUseProgram(s.glProgram));
     }
     else
     {
-        // Copy position buffer only. Triangles are already copied and known to be constant.
-        void* glPosPtr = NULL;
-        size_t posBytes = 0;
-        NVDR_CHECK_CUDA_ERROR(cudaGraphicsMapResources(1, &s.cudaPosBuffer, stream));
-        NVDR_CHECK_CUDA_ERROR(cudaGraphicsResourceGetMappedPointer(&glPosPtr, &posBytes, s.cudaPosBuffer));
-        NVDR_CHECK(posBytes >= posCount * sizeof(float), "mapped GL position buffer size mismatch");
-        NVDR_CHECK_CUDA_ERROR(cudaMemcpyAsync(glPosPtr, posPtr, posCount * sizeof(float), cudaMemcpyDeviceToDevice, stream));
-        NVDR_CHECK_CUDA_ERROR(cudaGraphicsUnmapResources(1, &s.cudaPosBuffer, stream));
+        // If we don't have a third buffer yet, create one.
+        if (!s.cudaPrevOutBuffer)
+        {
+            NVDR_CHECK_GL_ERROR(glBindTexture(GL_TEXTURE_2D_ARRAY, s.glPrevOutBuffer));
+            NVDR_CHECK_GL_ERROR(glTexImage3D(GL_TEXTURE_2D_ARRAY, 0, GL_RGBA32F, s.width, s.height, s.depth, 0, GL_RGBA, GL_UNSIGNED_BYTE, 0));
+            NVDR_CHECK_GL_ERROR(glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, GL_NEAREST));
+            NVDR_CHECK_GL_ERROR(glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_NEAREST));
+            NVDR_CHECK_GL_ERROR(glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE));
+            NVDR_CHECK_GL_ERROR(glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE));
+            NVDR_CHECK_CUDA_ERROR(cudaGraphicsGLRegisterImage(&s.cudaPrevOutBuffer, s.glPrevOutBuffer, GL_TEXTURE_3D, cudaGraphicsRegisterFlagsReadOnly));
+        }
+
+        // Swap the GL buffers.
+        GLuint glTempBuffer = s.glPrevOutBuffer;
+        s.glPrevOutBuffer = s.glColorBuffer[0];
+        s.glColorBuffer[0] = glTempBuffer;
+
+        // Swap the Cuda buffers.
+        cudaGraphicsResource_t cudaTempBuffer = s.cudaPrevOutBuffer;
+        s.cudaPrevOutBuffer = s.cudaColorBuffer[0];
+        s.cudaColorBuffer[0] = cudaTempBuffer;
+
+        // Bind the new output buffer.
+        NVDR_CHECK_GL_ERROR(glBindTexture(GL_TEXTURE_2D_ARRAY, s.glColorBuffer[0]));
+        NVDR_CHECK_GL_ERROR(glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, s.glColorBuffer[0], 0));
+
+        // Bind old buffer as the input texture.
+        NVDR_CHECK_GL_ERROR(glBindTexture(GL_TEXTURE_2D_ARRAY, s.glPrevOutBuffer));
+
+        // Activate the correct program.
+        NVDR_CHECK_GL_ERROR(glUseProgram(s.glProgramDP));
     }
 
     // Set viewport, clear color buffer(s) and depth/stencil buffer.

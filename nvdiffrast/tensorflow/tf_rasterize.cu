@@ -89,7 +89,7 @@ struct RasterizeFwdOp : public OpKernel
         const int32_t* rangesPtr = instance_mode ? 0 : ranges.flat<int32_t>().data(); // This is in CPU memory.
         const int32_t* triPtr = (initCtx || !m_tri_const) ? tri.flat<int32_t>().data() : NULL; // Copy triangles only if needed.
         int vtxPerInstance = instance_mode ? pos.dim_size(1) : 0;
-        rasterizeRender(ctx, m_glState, stream, posPtr, posCount, vtxPerInstance, triPtr, triCount, rangesPtr, width, height, depth);
+        rasterizeRender(ctx, m_glState, stream, posPtr, posCount, vtxPerInstance, triPtr, triCount, rangesPtr, width, height, depth, -1);
 
         // Allocate output tensors.
         TensorShape output_shape;
