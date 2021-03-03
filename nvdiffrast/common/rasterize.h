@@ -35,10 +35,11 @@ struct RasterizeGradParams
 };
 
 //------------------------------------------------------------------------
-// The rest is for C++ compilation only when using torch.
+// Do not try to include OpenGL stuff when compiling CUDA kernels for torch.
 
-#if !defined(NVDR_TORCH) || !defined(__CUDACC__)
-#include "glutil.inl"
+#if !(defined(NVDR_TORCH) && defined(__CUDACC__))
+#include "framework.h"
+#include "glutil.h"
 
 //------------------------------------------------------------------------
 // Draw command struct used by rasterizer.
@@ -93,4 +94,4 @@ void rasterizeRender(NVDR_CTX_ARGS, RasterizeGLState& s, cudaStream_t stream, co
 void rasterizeCopyResults(NVDR_CTX_ARGS, RasterizeGLState& s, cudaStream_t stream, float** outputPtr, int width, int height, int depth);
 
 //------------------------------------------------------------------------
-#endif // !defined(NVDR_TORCH) || !defined(__CUDACC__)
+#endif // !(defined(NVDR_TORCH) && defined(__CUDACC__))

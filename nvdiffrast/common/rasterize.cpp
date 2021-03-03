@@ -7,7 +7,7 @@
 // license agreement from NVIDIA CORPORATION is strictly prohibited.
 
 #include "rasterize.h"
-#include "glutil.inl"
+#include "glutil.h"
 #include <vector>
 #define STRINGIFY_SHADER_SOURCE(x) #x
 

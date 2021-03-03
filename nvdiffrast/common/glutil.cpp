@@ -6,64 +6,118 @@
 // distribution of this software and related documentation without an express
 // license agreement from NVIDIA CORPORATION is strictly prohibited.
 
-#pragma once
+//------------------------------------------------------------------------
+// Common.
+//------------------------------------------------------------------------
+
 #include "framework.h"
+#include "glutil.h"
 #include <iostream>
 #include <iomanip>
+
+// Create the function pointers.
+#define GLUTIL_EXT(return_type, name, ...) return_type (GLAPIENTRY* name)(__VA_ARGS__) = 0;
+#include "glutil_extlist.h"
+#undef GLUTIL_EXT
+
+// Track initialization status.
+static volatile bool s_glExtInitialized = false;
+
+// Error strings.
+const char* getGLErrorString(GLenum err)
+{
+    switch(err)
+    {
+        case GL_NO_ERROR:                       return "GL_NO_ERROR";
+        case GL_INVALID_ENUM:                   return "GL_INVALID_ENUM";
+        case GL_INVALID_VALUE:                  return "GL_INVALID_VALUE";
+        case GL_INVALID_OPERATION:              return "GL_INVALID_OPERATION";
+        case GL_STACK_OVERFLOW:                 return "GL_STACK_OVERFLOW";
+        case GL_STACK_UNDERFLOW:                return "GL_STACK_UNDERFLOW";
+        case GL_OUT_OF_MEMORY:                  return "GL_OUT_OF_MEMORY";
+        case GL_INVALID_FRAMEBUFFER_OPERATION:  return "GL_INVALID_FRAMEBUFFER_OPERATION";
+        case GL_TABLE_TOO_LARGE:                return "GL_TABLE_TOO_LARGE";
+        case GL_CONTEXT_LOST:                   return "GL_CONTEXT_LOST";
+    }
+    return "Unknown error";
+}
 
 //------------------------------------------------------------------------
 // Windows.
 //------------------------------------------------------------------------
 
 #ifdef _WIN32
-#define NOMINMAX
-#include <windows.h>
-#define GLEW_STATIC
-#include "../lib/glew.h"
-#include <GL/gl.h>
-#include <cuda_gl_interop.h>
 
-//------------------------------------------------------------------------
-
-struct GLContext
+static CRITICAL_SECTION getInitializedCriticalSection(void)
 {
-    HDC     hdc;
-    HGLRC   hglrc;
-    int     glewInitialized;
-};
+    CRITICAL_SECTION cs;
+    InitializeCriticalSection(&cs);
+    return cs;
+}
 
-//------------------------------------------------------------------------
+static CRITICAL_SECTION s_getProcAddressMutex = getInitializedCriticalSection();
 
-static void setGLContext(GLContext& glctx)
+static void safeGetProcAddress(const char* name, PROC* pfn)
+{
+    PROC result = wglGetProcAddress(name);
+    if (!result)
+    {
+        LeaveCriticalSection(&s_getProcAddressMutex); // Prepare for thread exit.
+        LOG(FATAL) << "wglGetProcAddress() failed for '" << name << "'";
+        exit(1); // Should never get here but make sure we exit.
+    }
+    *pfn = result;
+}
+
+static void initializeGLExtensions(void)
+{
+    // Use critical section for thread safety.
+    EnterCriticalSection(&s_getProcAddressMutex);
+
+    // Only dig function pointers if not done already.
+    if (!s_glExtInitialized)
+    {
+        // Generate code to populate the function pointers.
+#define GLUTIL_EXT(return_type, name, ...) safeGetProcAddress(#name, (PROC*)&name);
+#include "glutil_extlist.h"
+#undef GLUTIL_EXT
+
+        // Mark as initialized.
+        s_glExtInitialized = true;
+    }
+
+    // Done.
+    LeaveCriticalSection(&s_getProcAddressMutex);
+    return;
+}
+
+void setGLContext(GLContext& glctx)
 {
     if (!glctx.hglrc)
         LOG(FATAL) << "setGLContext() called with null gltcx";
     if (!wglMakeCurrent(glctx.hdc, glctx.hglrc))
         LOG(FATAL) << "wglMakeCurrent() failed when setting GL context";
 
-    if (glctx.glewInitialized)
+    if (glctx.extInitialized)
         return;
-    GLenum result = glewInit();
-    if (result != GLEW_OK)
-        LOG(FATAL) << "glewInit() failed, return value = " << result;
-    glctx.glewInitialized = 1;
+    initializeGLExtensions();
+    glctx.extInitialized = 1;
 }
 
-static void releaseGLContext(void)
+void releaseGLContext(void)
 {
     if (!wglMakeCurrent(NULL, NULL))
         LOG(FATAL) << "wglMakeCurrent() failed when releasing GL context";
 }
 
-extern "C" int set_gpu(const char*);
-
-static GLContext createGLContext(int cudaDeviceIdx)
+extern "C" int set_gpu(const char*); // In setgpu.lib
+GLContext createGLContext(int cudaDeviceIdx)
 {
     if (cudaDeviceIdx >= 0)
     {
         char pciBusId[256] = "";
         LOG(INFO) << "Creating GL context for Cuda device " << cudaDeviceIdx;
-        if (cudaDeviceGetPCIBusId(pciBusId, 255, cudaDeviceIdx) != CUDA_SUCCESS)
+        if (cudaDeviceGetPCIBusId(pciBusId, 255, cudaDeviceIdx))
         {
             LOG(INFO) << "PCI bus id query failed";
         }
@@ -115,7 +169,7 @@ static GLContext createGLContext(int cudaDeviceIdx)
     return glctx;
 }
 
-static void destroyGLContext(GLContext& glctx)
+void destroyGLContext(GLContext& glctx)
 {
     if (!glctx.hglrc)
         LOG(FATAL) << "destroyGLContext() called with null gltcx";
@@ -148,31 +202,44 @@ static void destroyGLContext(GLContext& glctx)
 //------------------------------------------------------------------------
 
 #ifdef __linux__
-#define GLEW_NO_GLU
-#define EGL_NO_X11 // X11/Xlib.h has "#define Status int" which breaks Tensorflow. Avoid it.
-#define MESA_EGL_NO_X11_HEADERS
-#if 1
-#   include "../lib/glew.h"    // Use local glew.h
-#else
-#   include <GL/glew.h> // Use system-supplied glew.h
-#endif
-#include <EGL/egl.h>
-#include <EGL/eglext.h>
-#include <GL/gl.h>
-#include <cuda_gl_interop.h>
 
-//------------------------------------------------------------------------
+static pthread_mutex_t s_getProcAddressMutex;
 
-struct GLContext
+typedef void (*PROCFN)();
+
+static void safeGetProcAddress(const char* name, PROCFN* pfn)
 {
-    EGLDisplay  display;
-    EGLContext  context;
-    int         glewInitialized;
-};
+    PROCFN result = eglGetProcAddress(name);
+    if (!result)
+    {
+        pthread_mutex_unlock(&s_getProcAddressMutex); // Prepare for thread exit.
+        LOG(FATAL) << "wglGetProcAddress() failed for '" << name << "'";
+        exit(1); // Should never get here but make sure we exit.
+    }
+    *pfn = result;
+}
 
-//------------------------------------------------------------------------
+static void initializeGLExtensions(void)
+{
+    pthread_mutex_lock(&s_getProcAddressMutex);
 
-static void setGLContext(GLContext& glctx)
+    // Only dig function pointers if not done already.
+    if (!s_glExtInitialized)
+    {
+        // Generate code to populate the function pointers.
+#define GLUTIL_EXT(return_type, name, ...) safeGetProcAddress(#name, (PROCFN*)&name);
+#include "glutil_extlist.h"
+#undef GLUTIL_EXT
+
+        // Mark as initialized.
+        s_glExtInitialized = true;
+    }
+
+    pthread_mutex_unlock(&s_getProcAddressMutex);
+    return;
+}
+
+void setGLContext(GLContext& glctx)
 {
     if (!glctx.context)
         LOG(FATAL) << "setGLContext() called with null gltcx";
@@ -180,16 +247,13 @@ static void setGLContext(GLContext& glctx)
     if (!eglMakeCurrent(glctx.display, EGL_NO_SURFACE, EGL_NO_SURFACE, glctx.context))
         LOG(ERROR) << "eglMakeCurrent() failed when setting GL context";
 
-    if (glctx.glewInitialized)
+    if (glctx.extInitialized)
         return;
-
-    GLenum result = glewInit();
-    if (result != GLEW_OK)
-        LOG(FATAL) << "glewInit() failed, return value = " << result;
-    glctx.glewInitialized = 1;
+    initializeGLExtensions();
+    glctx.extInitialized = 1;
 }
 
-static void releaseGLContext(void)
+void releaseGLContext(void)
 {
     EGLDisplay display = eglGetCurrentDisplay();
     if (display == EGL_NO_DISPLAY)
@@ -229,13 +293,13 @@ static EGLDisplay getCudaDisplay(int cudaDeviceIdx)
     eglQueryDevicesEXT(0, 0, &num_devices);
     if (!num_devices)
         return 0;
-    
+
     EGLDisplay display = 0;
     EGLDeviceEXT* devices = (EGLDeviceEXT*)malloc(num_devices * sizeof(void*));
     eglQueryDevicesEXT(num_devices, devices, &num_devices);
     for (int i=0; i < num_devices; i++)
     {
-        EGLDeviceEXT device = devices[i]; 
+        EGLDeviceEXT device = devices[i];
         intptr_t value = -1;
         if (eglQueryDeviceAttribEXT(device, EGL_CUDA_DEVICE_NV, &value) && value == cudaDeviceIdx)
         {
@@ -248,7 +312,7 @@ static EGLDisplay getCudaDisplay(int cudaDeviceIdx)
     return display;
 }
 
-static GLContext createGLContext(int cudaDeviceIdx)
+GLContext createGLContext(int cudaDeviceIdx)
 {
     EGLDisplay display = 0;
 
@@ -261,7 +325,7 @@ static GLContext createGLContext(int cudaDeviceIdx)
             LOG(INFO) << "Failed, falling back to default display";
     }
 
-    if (!display)  
+    if (!display)
     {
         display = eglGetDisplay(EGL_DEFAULT_DISPLAY);
         if (display == EGL_NO_DISPLAY)
@@ -312,7 +376,7 @@ static GLContext createGLContext(int cudaDeviceIdx)
     return glctx;
 }
 
-static void destroyGLContext(GLContext& glctx)
+void destroyGLContext(GLContext& glctx)
 {
     if (!glctx.context)
         LOG(FATAL) << "destroyGLContext() called with null gltcx";
@@ -332,28 +396,8 @@ static void destroyGLContext(GLContext& glctx)
     memset(&glctx, 0, sizeof(GLContext));
 }
 
+//------------------------------------------------------------------------
+
 #endif // __linux__
-
-//------------------------------------------------------------------------
-// Common.
-//------------------------------------------------------------------------
-
-static const char* getGLErrorString(GLenum err)
-{
-    switch(err)
-    {
-        case GL_NO_ERROR:                       return "GL_NO_ERROR";
-        case GL_INVALID_ENUM:                   return "GL_INVALID_ENUM";
-        case GL_INVALID_VALUE:                  return "GL_INVALID_VALUE";
-        case GL_INVALID_OPERATION:              return "GL_INVALID_OPERATION";
-        case GL_STACK_OVERFLOW:                 return "GL_STACK_OVERFLOW";
-        case GL_STACK_UNDERFLOW:                return "GL_STACK_UNDERFLOW";
-        case GL_OUT_OF_MEMORY:                  return "GL_OUT_OF_MEMORY";
-        case GL_INVALID_FRAMEBUFFER_OPERATION:  return "GL_INVALID_FRAMEBUFFER_OPERATION";
-        case GL_TABLE_TOO_LARGE:                return "GL_TABLE_TOO_LARGE";
-        case GL_CONTEXT_LOST:                   return "GL_CONTEXT_LOST";
-    }
-    return "Unknown error";
-}
 
 //------------------------------------------------------------------------

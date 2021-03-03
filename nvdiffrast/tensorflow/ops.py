@@ -18,8 +18,8 @@ from . import plugin_loader
 # OpenGL-related linker options depending on platform.
 def _get_gl_opts():
     libs = {
-        'posix': ['GL', 'GLEW'],
-        'nt':    ['gdi32', 'glew32s', 'opengl32', 'user32', 'setgpu'],
+        'posix': ['GL', 'EGL'],
+        'nt':    ['gdi32', 'opengl32', 'user32', 'setgpu'],
     }
     return ['-l' + x for x in libs[os.name]]
 

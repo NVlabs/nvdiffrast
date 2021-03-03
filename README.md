@@ -19,10 +19,6 @@ For business inquiries, please contact [researchinquiries@nvidia.com](mailto:res
 
 We do not currently accept outside code contributions in the form of pull requests.
 
-[GLEW](https://github.com/nigels-com/glew) library redistributed under the 
-[Modified BSD License](http://glew.sourceforge.net/glew.txt), the 
-[Mesa 3-D License](http://glew.sourceforge.net/mesa.txt) (MIT) and the 
-[Khronos License](http://glew.sourceforge.net/khronos.txt) (MIT).
 Environment map stored as part of `samples/data/envphong.npz` is derived from a Wave Engine
 [sample material](https://github.com/WaveEngine/Samples/tree/master/Materials/EnvironmentMap/Content/Assets/CubeMap.cubemap)
 originally shared under 

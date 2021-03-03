@@ -15,6 +15,7 @@
 
 #define __CUDA_INCLUDE_COMPILER_INTERNAL_HEADERS__
 #include "../common/framework.h"
+#include "../common/glutil.cpp"
 
 #include "../common/common.h"
 #include "../common/common.cpp"

@@ -12,7 +12,7 @@
 #
 # This file defaults to pytorch/pytorch as it works on slightly older
 # driver versions.
-ARG BASE_IMAGE=pytorch/pytorch:1.6.0-cuda10.1-cudnn7-devel
+ARG BASE_IMAGE=pytorch/pytorch:1.7.1-cuda11.0-cudnn8-devel
 FROM $BASE_IMAGE
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -43,14 +43,6 @@ ENV NVIDIA_DRIVER_CAPABILITIES compute,utility,graphics
 ENV PYOPENGL_PLATFORM egl
 
 COPY docker/10_nvidia.json /usr/share/glvnd/egl_vendor.d/10_nvidia.json
-
-# glew installation from source
-RUN curl -L https://downloads.sourceforge.net/project/glew/glew/2.1.0/glew-2.1.0.tgz > /tmp/glew-2.1.0.tgz
-RUN mkdir -p /tmp && \
-    cd /tmp && tar zxf /tmp/glew-2.1.0.tgz && cd glew-2.1.0 && \
-    SYSTEM=linux-egl make && \
-    SYSTEM=linux-egl make install && \
-    rm -rf /tmp/glew-2.1.0.zip /tmp/glew-2.1.0
 
 RUN pip install imageio imageio-ffmpeg
 

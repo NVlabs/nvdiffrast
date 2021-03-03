@@ -45,14 +45,15 @@ def _get_plugin():
 
     # Linker options.
     if os.name == 'posix':
-        ldflags = ['-lGL', '-lGLEW', '-lEGL']
+        ldflags = ['-lGL', '-lEGL']
     elif os.name == 'nt':
-        libs = ['gdi32', 'glew32s', 'opengl32', 'user32', 'setgpu']
+        libs = ['gdi32', 'opengl32', 'user32', 'setgpu']
         ldflags = ['/LIBPATH:' + lib_dir] + ['/DEFAULTLIB:' + x for x in libs]
 
     # List of source files.
     source_files = [
         '../common/common.cpp',
+        '../common/glutil.cpp',
         '../common/rasterize.cu',
         '../common/rasterize.cpp',
         '../common/interpolate.cu',

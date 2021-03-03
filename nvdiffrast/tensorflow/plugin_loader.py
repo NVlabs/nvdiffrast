@@ -156,7 +156,7 @@ def get_plugin(cuda_file, extra_nvcc_options=[]):
         compile_opts = ''
         if os.name == 'nt':
             compile_opts += '"%s"' % os.path.join(tf.sysconfig.get_lib(), 'python', '_pywrap_tensorflow_internal.lib')
-            compile_opts += ' --library-path="%s"' % (os.path.dirname(__file__) + r"\..\lib") # Find glew32s.lib during compilation.
+            compile_opts += ' --library-path="%s"' % (os.path.dirname(__file__) + r"\..\lib") # Find libraries during compilation.
         elif os.name == 'posix':
             compile_opts += '"%s"' % os.path.join(tf.sysconfig.get_lib(), 'python', '_pywrap_tensorflow_internal.so')
             compile_opts += ' --compiler-options \'-fPIC -D_GLIBCXX_USE_CXX11_ABI=0\''
