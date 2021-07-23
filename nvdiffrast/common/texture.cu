@@ -18,6 +18,8 @@ static __device__ __forceinline__ void accum_from_mem(float* a, int s, float4 b,
 static __device__ __forceinline__ void accum_to_mem(float&  a, float* b, int s) { a += b[0]; }
 static __device__ __forceinline__ void accum_to_mem(float2& a, float* b, int s) { float2 v = a; v.x += b[0]; v.y += b[s]; a = v; }
 static __device__ __forceinline__ void accum_to_mem(float4& a, float* b, int s) { float4 v = a; v.x += b[0]; v.y += b[s]; v.z += b[2*s]; v.w += b[3*s]; a = v; }
+static __device__ __forceinline__ bool isfinite_vec3(const float3& a) { return isfinite(a.x) && isfinite(a.y) && isfinite(a.z); }
+static __device__ __forceinline__ bool isfinite_vec4(const float4& a) { return isfinite(a.x) && isfinite(a.y) && isfinite(a.z) && isfinite(a.w); }
 template<class T> static __device__ __forceinline__ T lerp  (const T& a, const T& b, float c) { return a + c * (b - a); }
 template<class T> static __device__ __forceinline__ T bilerp(const T& a, const T& b, const T& c, const T& d, const float2& e) { return lerp(lerp(a, b, e.x), lerp(c, d, e.x), e.y); }
 
@@ -110,6 +112,8 @@ static __device__ __forceinline__ int indexCubeMap(float& x, float& y, float z)
     float m1 = (idx != 2) ? -m : m;
     x = x * m0 + .5;
     y = y * m1 + .5;
+    if (!isfinite(x) || !isfinite(y))
+        return -1; // Invalid uv.
     x = fminf(fmaxf(x, 0.f), 1.f);
     y = fminf(fmaxf(y, 0.f), 1.f);
     return idx;
@@ -137,7 +141,10 @@ static __device__ __forceinline__ float3 indexCubeMapGrad(float3 uv, float gu, f
     float gy = (idx & 0x0c) ? gl : -gv;
     float gz = (idx & 0x30) ? gl : (idx & 0x03) ? gu : gv;
     gz = (idx & 0x09) ? -gz : gz;
-    return make_float3(gx, gy, gz) * (m * .5f);
+    float3 res = make_float3(gx, gy, gz) * (m * .5f);
+    if (!isfinite_vec3(res))
+        return make_float3(0.f, 0.f, 0.f); // Invalid uv.
+    return res;
 }
 
 // Based on dL/d(d{s,t}/s{X,Y}), compute dL/d(d{x,y,z}/d{X,Y}). This is just two
@@ -171,6 +178,11 @@ static __device__ __forceinline__ void indexCubeMapGrad4(float3 uv, float4 dw, f
     }
     g0 = make_float3(gx0, gy0, gz0) * (m * .5f);
     g1 = make_float3(gx1, gy1, gz1) * (m * .5f);
+    if (!isfinite_vec3(g0) || !isfinite_vec3(g1))
+    {
+        g0 = make_float3(0.f, 0.f, 0.f); // Invalid uv.
+        g1 = make_float3(0.f, 0.f, 0.f);
+    }
 }
 
 // Compute d{s,t}/d{X,Y} based on d{x,y,z}/d{X,Y} at a given 3D lookup vector.
@@ -197,27 +209,33 @@ static __device__ __forceinline__ float4 indexCubeMapGradST(float3 uv, float3 dv
     gu *= (idx & 0x34) ? -mm : mm;
     gv *= (idx & 0x2e) ? -mm : mm;
 
+    float4 res;
     if (idx & 0x03)
     {
-        return make_float4(gu * dvdX.x + dm * dvdX.z,
-                           gu * dvdY.x + dm * dvdY.z,
-                           gv * dvdX.x - dm * dvdX.y,
-                           gv * dvdY.x - dm * dvdY.y);
+        res = make_float4(gu * dvdX.x + dm * dvdX.z,
+                          gu * dvdY.x + dm * dvdY.z,
+                          gv * dvdX.x - dm * dvdX.y,
+                          gv * dvdY.x - dm * dvdY.y);
     }
     else if (idx & 0x0c)
     {
-        return make_float4(gu * dvdX.y + dm * dvdX.x,
-                           gu * dvdY.y + dm * dvdY.x,
-                           gv * dvdX.y + dm * dvdX.z,
-                           gv * dvdY.y + dm * dvdY.z);
-    } 
+        res = make_float4(gu * dvdX.y + dm * dvdX.x,
+                          gu * dvdY.y + dm * dvdY.x,
+                          gv * dvdX.y + dm * dvdX.z,
+                          gv * dvdY.y + dm * dvdY.z);
+    }
     else // (idx & 0x30)
     {
-        return make_float4(gu * dvdX.z + copysignf(dm, c) * dvdX.x,
-                           gu * dvdY.z + copysignf(dm, c) * dvdY.x,
-                           gv * dvdX.z - dm * dvdX.y,
-                           gv * dvdY.z - dm * dvdY.y);
+        res = make_float4(gu * dvdX.z + copysignf(dm, c) * dvdX.x,
+                          gu * dvdY.z + copysignf(dm, c) * dvdY.x,
+                          gv * dvdX.z - dm * dvdX.y,
+                          gv * dvdY.z - dm * dvdY.y);
     }
+
+    if (!isfinite_vec4(res))
+        return make_float4(0.f, 0.f, 0.f, 0.f);
+
+    return res;
 }
 
 // Compute d(d{s,t}/d{X,Y})/d{x,y,z}, i.e., how the pixel derivatives of 2D face
@@ -313,7 +331,10 @@ static __device__ __forceinline__ int indexTextureNearest(const TextureKernelPar
     if (CUBE_MODE)
     {
         // No wrap. Fold face index into tz right away.
-        tz = 6 * tz + indexCubeMap(u, v, uv.z); // Rewrites u, v.
+        int idx = indexCubeMap(u, v, uv.z); // Rewrites u, v.
+        if (idx < 0)
+            return -1; // Invalid uv.
+        tz = 6 * tz + idx;
     }
     else
     {
@@ -364,6 +385,11 @@ static __device__ __forceinline__ float2 indexTextureLinear(const TextureKernelP
     {
         // Neither clamp or wrap.
         face = indexCubeMap(u, v, uv.z); // Rewrites u, v.
+        if (face < 0)
+        {
+            tcOut.x = tcOut.y = tcOut.z = tcOut.w = -1; // Invalid uv.
+            return make_float2(0.f, 0.f);
+        }
         u = u * (float)w - 0.5f;
         v = v * (float)h - 0.5f;
     }
@@ -511,14 +537,16 @@ static __device__ __forceinline__ void calculateMipLevel(int& level0, int& level
             float d_f_ddtdX = vscl * (dtdx * (l2aw + AB) + dtdy * Cw);
             float d_f_ddtdY = vscl * (dtdy * (l2aw - AB) + dtdx * Cw);
 
-            *pdw = make_float4(d_f_ddsdX, d_f_ddsdY, d_f_ddtdX, d_f_ddtdY);
+            float4 d_f_dw = make_float4(d_f_ddsdX, d_f_ddsdY, d_f_ddtdX, d_f_ddtdY);
+            if (!CUBE_MODE)
+                *pdw = isfinite_vec4(d_f_dw) ? d_f_dw : make_float4(0.f, 0.f, 0.f, 0.f);
 
             // In cube maps, there is also a texture coordinate vs. mip level gradient.
+            // Only output nonzero vectors if both are free of inf/Nan garbage.
             if (CUBE_MODE)
             {
                 float4 dx, dy, dz;
                 indexCubeMapGrad2(uv, dvdX, dvdY, dx, dy, dz);
-
                 float3 d_dsdX_dv = make_float3(dx.x, dy.x, dz.x);
                 float3 d_dsdY_dv = make_float3(dx.y, dy.y, dz.y);
                 float3 d_dtdX_dv = make_float3(dx.z, dy.z, dz.z);
@@ -530,12 +558,14 @@ static __device__ __forceinline__ void calculateMipLevel(int& level0, int& level
                 d_f_dv += d_dtdX_dv * d_f_ddtdX;
                 d_f_dv += d_dtdY_dv * d_f_ddtdY;
 
-                *pdfdv = d_f_dv;
+                bool finite = isfinite_vec4(d_f_dw) && isfinite_vec3(d_f_dv);
+                *pdw   = finite ? d_f_dw : make_float4(0.f, 0.f, 0.f, 0.f);
+                *pdfdv = finite ? d_f_dv : make_float3(0.f, 0.f, 0.f);
             }
         }
 
         // Finally, calculate mip level.
-        flevel = .5f * __log2f(lenMajorSqr);
+        flevel = .5f * __log2f(lenMajorSqr); // May be inf/NaN, but clamp fixes it.
     }
 
     // Bias the mip level and clamp.
@@ -560,6 +590,7 @@ static __device__ __forceinline__ void calculateMipLevel(int& level0, int& level
 template<class T>
 static __device__ __forceinline__ void fetchQuad(T& a00, T& a10, T& a01, T& a11, const float* pIn, int4 tc, bool corner)
 {
+    // For invalid cube map uv, tc will be all negative, and all texel values will be zero.
     if (corner)
     {
         T avg = zero_value<T>();
@@ -584,6 +615,7 @@ static __device__ __forceinline__ void fetchQuad(T& a00, T& a10, T& a01, T& a11,
 
 static __device__ __forceinline__ void accumQuad(float4 c, float* pOut, int level, int4 tc, bool corner, CA_TEMP_PARAM)
 {
+    // For invalid cube map uv, tc will be all negative, and no accumulation will take place.
     if (corner)
     {
         float cb;

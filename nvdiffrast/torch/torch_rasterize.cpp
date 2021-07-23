@@ -34,6 +34,9 @@ RasterizeGLStateWrapper::RasterizeGLStateWrapper(bool enableDB, bool automatic_,
 
 RasterizeGLStateWrapper::~RasterizeGLStateWrapper(void)
 {
+    setGLContext(pState->glctx);
+    rasterizeReleaseBuffers(NVDR_CTX_PARAMS, *pState);
+    releaseGLContext();
     destroyGLContext(pState->glctx);
     delete pState;
 }

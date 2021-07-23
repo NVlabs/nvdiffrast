@@ -42,21 +42,9 @@ struct RasterizeGradParams
 #include "glutil.h"
 
 //------------------------------------------------------------------------
-// Draw command struct used by rasterizer.
-
-struct GLDrawCmd
-{
-    uint32_t    count;
-    uint32_t    instanceCount;
-    uint32_t    firstIndex;
-    uint32_t    baseVertex;
-    uint32_t    baseInstance;
-};
-
-//------------------------------------------------------------------------
 // OpenGL-related persistent state for forward op.
 
-struct RasterizeGLState
+struct RasterizeGLState // Must be initializable by memset to zero.
 {
     int                     width;              // Allocated frame buffer width.
     int                     height;             // Allocated frame buffer height.
@@ -81,7 +69,6 @@ struct RasterizeGLState
     cudaGraphicsResource_t  cudaPrevOutBuffer;
     cudaGraphicsResource_t  cudaPosBuffer;
     cudaGraphicsResource_t  cudaTriBuffer;
-    std::vector<GLDrawCmd>  drawCmdBuffer;
     int                     enableDB;
 };
 
@@ -92,6 +79,7 @@ void rasterizeInitGLContext(NVDR_CTX_ARGS, RasterizeGLState& s, int cudaDeviceId
 void rasterizeResizeBuffers(NVDR_CTX_ARGS, RasterizeGLState& s, int posCount, int triCount, int width, int height, int depth);
 void rasterizeRender(NVDR_CTX_ARGS, RasterizeGLState& s, cudaStream_t stream, const float* posPtr, int posCount, int vtxPerInstance, const int32_t* triPtr, int triCount, const int32_t* rangesPtr, int width, int height, int depth, int peeling_idx);
 void rasterizeCopyResults(NVDR_CTX_ARGS, RasterizeGLState& s, cudaStream_t stream, float** outputPtr, int width, int height, int depth);
+void rasterizeReleaseBuffers(NVDR_CTX_ARGS, RasterizeGLState& s);
 
 //------------------------------------------------------------------------
 #endif // !(defined(NVDR_TORCH) && defined(__CUDACC__))

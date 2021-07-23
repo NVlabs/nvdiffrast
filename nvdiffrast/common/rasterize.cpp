@@ -30,6 +30,18 @@ static int ROUND_UP_BITS(uint32_t x, uint32_t y)
 }
 
 //------------------------------------------------------------------------
+// Draw command struct used by rasterizer.
+
+struct GLDrawCmd
+{
+    uint32_t    count;
+    uint32_t    instanceCount;
+    uint32_t    firstIndex;
+    uint32_t    baseVertex;
+    uint32_t    baseInstance;
+};
+
+//------------------------------------------------------------------------
 // GL helpers.
 
 static void compileGLShader(NVDR_CTX_ARGS, GLuint* pShader, GLenum shaderType, const char* src)
@@ -386,14 +398,6 @@ void rasterizeResizeBuffers(NVDR_CTX_ARGS, RasterizeGLState& s, int posCount, in
         for (int i=0; i < num_outputs; i++)
             NVDR_CHECK_CUDA_ERROR(cudaGraphicsGLRegisterImage(&s.cudaColorBuffer[i], s.glColorBuffer[i], GL_TEXTURE_3D, cudaGraphicsRegisterFlagsReadOnly));
     }
-
-    // Resize range arrays?
-    if ((unsigned int)depth > s.drawCmdBuffer.size())
-    {
-        int newSize = (depth > 64) ? ROUND_UP_BITS(depth, 1) : 64;
-        LOG(INFO) << "Increasing range array size to " << newSize << " elements";
-        s.drawCmdBuffer.resize(newSize);
-    }
 }
 
 void rasterizeRender(NVDR_CTX_ARGS, RasterizeGLState& s, cudaStream_t stream, const float* posPtr, int posCount, int vtxPerInstance, const int32_t* triPtr, int triCount, const int32_t* rangesPtr, int width, int height, int depth, int peeling_idx)
@@ -487,6 +491,9 @@ void rasterizeRender(NVDR_CTX_ARGS, RasterizeGLState& s, cudaStream_t stream, co
     }
     else
     {
+        // Populate a buffer for draw commands and execute it.
+        std::vector<GLDrawCmd> drawCmdBuffer(depth);
+
         if (!rangesPtr)
         {
             // Fill in range array to instantiate the same triangles for each output layer.
@@ -494,7 +501,7 @@ void rasterizeRender(NVDR_CTX_ARGS, RasterizeGLState& s, cudaStream_t stream, co
             // the first dimension in addressing the triangle array.
             for (int i=0; i < depth; i++)
             {
-                GLDrawCmd& cmd = s.drawCmdBuffer[i];
+                GLDrawCmd& cmd = drawCmdBuffer[i];
                 cmd.firstIndex    = 0;
                 cmd.count         = triCount;
                 cmd.baseVertex    = vtxPerInstance * i;
@@ -509,7 +516,7 @@ void rasterizeRender(NVDR_CTX_ARGS, RasterizeGLState& s, cudaStream_t stream, co
             // the first dimension in addressing the triangle array.
             for (int i=0, j=0; i < depth; i++)
             {
-                GLDrawCmd& cmd = s.drawCmdBuffer[i];
+                GLDrawCmd& cmd = drawCmdBuffer[i];
                 int first = rangesPtr[j++];
                 int count = rangesPtr[j++];
                 NVDR_CHECK(first >= 0 && count >= 0, "range contains negative values");
@@ -523,7 +530,7 @@ void rasterizeRender(NVDR_CTX_ARGS, RasterizeGLState& s, cudaStream_t stream, co
         }
 
         // Draw!
-        NVDR_CHECK_GL_ERROR(glMultiDrawElementsIndirect(GL_TRIANGLES, GL_UNSIGNED_INT, &s.drawCmdBuffer[0], depth, sizeof(GLDrawCmd)));
+        NVDR_CHECK_GL_ERROR(glMultiDrawElementsIndirect(GL_TRIANGLES, GL_UNSIGNED_INT, &drawCmdBuffer[0], depth, sizeof(GLDrawCmd)));
     }
 }
 
@@ -555,6 +562,38 @@ void rasterizeCopyResults(NVDR_CTX_ARGS, RasterizeGLState& s, cudaStream_t strea
         NVDR_CHECK_CUDA_ERROR(cudaMemcpy3DAsync(&p, stream));
     }
     NVDR_CHECK_CUDA_ERROR(cudaGraphicsUnmapResources(num_outputs, s.cudaColorBuffer, stream));
+}
+
+void rasterizeReleaseBuffers(NVDR_CTX_ARGS, RasterizeGLState& s)
+{
+    int num_outputs = s.enableDB ? 2 : 1;
+
+    if (s.cudaPosBuffer)
+    {
+        NVDR_CHECK_CUDA_ERROR(cudaGraphicsUnregisterResource(s.cudaPosBuffer));
+        s.cudaPosBuffer = 0;
+    }
+
+    if (s.cudaTriBuffer)
+    {
+        NVDR_CHECK_CUDA_ERROR(cudaGraphicsUnregisterResource(s.cudaTriBuffer));
+        s.cudaTriBuffer = 0;
+    }
+
+    for (int i=0; i < num_outputs; i++)
+    {
+        if (s.cudaColorBuffer[i])
+        {
+            NVDR_CHECK_CUDA_ERROR(cudaGraphicsUnregisterResource(s.cudaColorBuffer[i]));
+            s.cudaColorBuffer[i] = 0;
+        }
+    }
+
+    if (s.cudaPrevOutBuffer)
+    {
+        NVDR_CHECK_CUDA_ERROR(cudaGraphicsUnregisterResource(s.cudaPrevOutBuffer));
+        s.cudaPrevOutBuffer = 0;
+    }
 }
 
 //------------------------------------------------------------------------
