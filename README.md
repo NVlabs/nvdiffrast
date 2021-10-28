@@ -15,7 +15,7 @@ Copyright &copy; 2020, NVIDIA Corporation. All rights reserved.
 
 This work is made available under the [Nvidia Source Code License](https://github.com/NVlabs/nvdiffrast/blob/main/LICENSE.txt).
 
-For business inquiries, please contact [researchinquiries@nvidia.com](mailto:researchinquiries@nvidia.com)
+For business inquiries, please visit our website and submit the form: [NVIDIA Research Licensing](https://www.nvidia.com/en-us/research/inquiries/)
 
 We do not currently accept outside code contributions in the form of pull requests.
 
