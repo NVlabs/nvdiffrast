@@ -193,7 +193,6 @@ void rasterizeInitGLContext(NVDR_CTX_ARGS, RasterizeGLState& s, int cudaDeviceId
             STRINGIFY_SHADER_SOURCE(
                 in vec4 var_uvzw;
                 in vec4 var_db;
-                in int gl_PrimitiveID;
                 layout(location = 0) out vec4 out_raster;
                 layout(location = 1) out vec4 out_db;
                 void main()
@@ -210,8 +209,6 @@ void rasterizeInitGLContext(NVDR_CTX_ARGS, RasterizeGLState& s, int cudaDeviceId
             STRINGIFY_SHADER_SOURCE(
                 in vec4 var_uvzw;
                 in vec4 var_db;
-                in int gl_Layer;
-                in int gl_PrimitiveID;
                 layout(binding = 0) uniform sampler2DArray out_prev;
                 layout(location = 0) out vec4 out_raster;
                 layout(location = 1) out vec4 out_db;
@@ -255,7 +252,6 @@ void rasterizeInitGLContext(NVDR_CTX_ARGS, RasterizeGLState& s, int cudaDeviceId
             "#version 330\n"
             STRINGIFY_SHADER_SOURCE(
                 in vec4 var_uvzw;
-                in int gl_PrimitiveID;
                 layout(location = 0) out vec4 out_raster;
                 void main()
                 {
@@ -269,8 +265,6 @@ void rasterizeInitGLContext(NVDR_CTX_ARGS, RasterizeGLState& s, int cudaDeviceId
             "#version 430\n"
             STRINGIFY_SHADER_SOURCE(
                 in vec4 var_uvzw;
-                in int gl_Layer;
-                in int gl_PrimitiveID;
                 layout(binding = 0) uniform sampler2DArray out_prev;
                 layout(location = 0) out vec4 out_raster;
                 void main()

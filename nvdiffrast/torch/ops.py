@@ -125,9 +125,18 @@ class RasterizeGLContext:
     def __init__(self, output_db=True, mode='automatic', device=None):
         '''Create a new OpenGL rasterizer context.
 
-        Creating an OpenGL context is a slow operation so you should reuse the same
+        Creating an OpenGL context is a slow operation so you should usually reuse the same
         context in all calls to `rasterize()` on the same CPU thread. The OpenGL context
         is deleted when the object is destroyed.
+
+        Side note: When using the OpenGL context in a rasterization operation, the
+        context's internal framebuffer object is automatically enlarged to accommodate the
+        rasterization operation's output shape, but it is never shrunk in size until the
+        context is destroyed. Thus, if you need to rasterize, say, deep low-resolution
+        tensors and also shallow high-resolution tensors, you can conserve GPU memory by
+        creating two separate OpenGL contexts for these tasks. In this scenario, using the
+        same OpenGL context for both tasks would end up reserving GPU memory for a deep,
+        high-resolution output tensor.
 
         Args:
           output_db (bool): Compute and output image-space derivates of barycentrics.

@@ -15,7 +15,7 @@ import torch
 
 def projection(x=0.1, n=1.0, f=50.0):
     return np.array([[n/x,    0,            0,              0],
-                     [  0, n/-x,            0,              0],
+                     [  0,  n/x,            0,              0],
                      [  0,    0, -(f+n)/(f-n), -(2*f*n)/(f-n)],
                      [  0,    0,           -1,              0]]).astype(np.float32)
 

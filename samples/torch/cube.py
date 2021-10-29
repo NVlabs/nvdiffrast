@@ -136,15 +136,15 @@ def fit_cube(max_iter          = 5000,
             if display_image or save_mp4:
                 ang = ang + 0.01
 
-                img_b = color[0].cpu().numpy()
-                img_o = color_opt[0].detach().cpu().numpy()
+                img_b = color[0].cpu().numpy()[::-1]
+                img_o = color_opt[0].detach().cpu().numpy()[::-1]
                 img_d = render(glctx, a_mvp, vtx_pos_opt, pos_idx, vtx_col_opt, col_idx, display_res)[0]
                 img_r = render(glctx, a_mvp, vtx_pos, pos_idx, vtx_col, col_idx, display_res)[0]
 
                 scl = display_res // img_o.shape[0]
                 img_b = np.repeat(np.repeat(img_b, scl, axis=0), scl, axis=1)
                 img_o = np.repeat(np.repeat(img_o, scl, axis=0), scl, axis=1)
-                result_image = make_grid(np.stack([img_o, img_b, img_d.detach().cpu().numpy(), img_r.cpu().numpy()]))
+                result_image = make_grid(np.stack([img_o, img_b, img_d.detach().cpu().numpy()[::-1], img_r.cpu().numpy()[::-1]]))
 
                 if display_image:
                     util.display_image(result_image, size=display_res, title='%d / %d' % (it, max_iter))

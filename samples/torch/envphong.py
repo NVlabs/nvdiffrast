@@ -175,7 +175,7 @@ def fit_env_phong(max_iter          = 1000,
             color_opt = dr.texture(env_var[np.newaxis, ...], refl, uv_da=refld, filter_mode='linear-mipmap-linear', boundary_mode='cube')
             color_opt = color_opt + phong_var[:3] * torch.max(zero_tensor, ldotr) ** phong_var[3]
             color_opt = torch.where(mask, one_tensor, color_opt)
-            result_image = color_opt.detach()[0].cpu().numpy()
+            result_image = color_opt.detach()[0].cpu().numpy()[::-1]
             if display_image:
                 util.display_image(result_image, size=display_res, title='%d / %d' % (it, max_iter))
             if save_mp4:

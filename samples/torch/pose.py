@@ -233,11 +233,10 @@ def fit_pose(max_iter           = 10000,
             save_mp4      = mp4save_interval and (it % mp4save_interval == 0)
 
             if display_image or save_mp4:
-                c = color[0].detach().cpu().numpy()
                 img_ref  = color[0].detach().cpu().numpy()
                 img_opt  = color_opt[0].detach().cpu().numpy()
                 img_best = render(glctx, torch.matmul(mvp, q_to_mtx(pose_best)), vtx_pos, pos_idx, vtx_col, col_idx, resolution)[0].detach().cpu().numpy()
-                result_image = np.concatenate([img_ref, img_best, img_opt], axis=1)
+                result_image = np.concatenate([img_ref, img_best, img_opt], axis=1)[::-1]
 
                 if display_image:
                     util.display_image(result_image, size=display_res, title='(%d) %d / %d' % (rep, it, max_iter))

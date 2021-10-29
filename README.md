@@ -20,9 +20,9 @@ For business inquiries, please visit our website and submit the form: [NVIDIA Re
 We do not currently accept outside code contributions in the form of pull requests.
 
 Environment map stored as part of `samples/data/envphong.npz` is derived from a Wave Engine
-[sample material](https://github.com/WaveEngine/Samples/tree/master/Materials/EnvironmentMap/Content/Assets/CubeMap.cubemap)
+[sample material](https://github.com/WaveEngine/Samples-2.5/tree/master/Materials/EnvironmentMap/Content/Assets/CubeMap.cubemap)
 originally shared under 
-[MIT License](https://github.com/WaveEngine/Samples/blob/master/LICENSE.md).
+[MIT License](https://github.com/WaveEngine/Samples-2.5/blob/master/LICENSE.md).
 Mesh and texture stored as part of `samples/data/earth.npz` are derived from
 [3D Earth Photorealistic 2K](https://www.turbosquid.com/3d-models/3d-realistic-earth-photorealistic-2k-1279125)
 model originally made available under

@@ -12,7 +12,7 @@
 #
 # This file defaults to pytorch/pytorch as it works on slightly older
 # driver versions.
-ARG BASE_IMAGE=pytorch/pytorch:1.7.1-cuda11.0-cudnn8-devel
+ARG BASE_IMAGE=pytorch/pytorch:1.10.0-cuda11.3-cudnn8-devel
 FROM $BASE_IMAGE
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -44,7 +44,7 @@ ENV PYOPENGL_PLATFORM egl
 
 COPY docker/10_nvidia.json /usr/share/glvnd/egl_vendor.d/10_nvidia.json
 
-RUN pip install imageio imageio-ffmpeg
+RUN pip install ninja imageio imageio-ffmpeg
 
 COPY nvdiffrast /tmp/pip/nvdiffrast/
 COPY README.md setup.py /tmp/pip/

@@ -513,7 +513,7 @@ Rendered in 4×4 higher resolution and downsampled
 <p>Nvdiffrast follows OpenGL's coordinate systems and other conventions. This is partially because we use OpenGL to accelerate the rasterization operation, but mostly so that there is a <a href="https://xkcd.com/927/">single standard to follow</a>.</p>
 <ul>
 <li>
-When rasterizing, the normalized device coordinates — i.e., clip-space coordinates after division by <span class="math inline"><em>w</em></span> — map to screen so that <span class="math inline"><em>x</em></span> increases towards right side of screen, <span class="math inline"><em>y</em></span> increases towards top of screen, and <strong><span class="math inline"><em>z</em></span> increases towards the viewer</strong>.
+In OpenGL convention, the perspective projection matrix (as implemented in, e.g., <a href="https://github.com/NVlabs/nvdiffrast/blob/main/samples/torch/util.py#L16-L20"><code>utils.projection()</code></a> in our samples and <a href="https://www.khronos.org/registry/OpenGL-Refpages/gl2.1/xhtml/glFrustum.xml"><code>glFrustum()</code></a> in OpenGL) treats the view-space <span class="math inline"><em>z</em></span> as increasing towards the viewer. However, <em>after</em> multiplication by perspective projection matrix, the homogeneous <a href="https://en.wikipedia.org/wiki/Clip_coordinates">clip-space</a> coordinate <span class="math inline"><em>z</em></span>/<span class="math inline"><em>w</em></span> increases away from the viewer. Hence, a larger depth value in the rasterizer output tensor also corresponds to a surface further away from the viewer.
 </li>
 <li>
 <strong>The memory order of image data in OpenGL, and consequently in nvdiffrast, is bottom-up.</strong> This means that row 0 of a tensor containing an image is the bottom row of the texture/image, which is the opposite of the more common scanline order. If you want to keep your image data in the conventional top-down order in your code, but have it logically the right way up inside nvdiffrast, you will need to flip the images vertically when crossing the boundary.
@@ -782,6 +782,7 @@ Third depth layer
 <p>In manual mode, the user assumes the responsibility of setting and releasing the OpenGL context. Most of the time, if you don't have any other libraries that would be using OpenGL, you can just set the context once after having created it and keep it set until the program exits. However, keep in mind that the active OpenGL context is a thread-local resource, so it needs to be set in the same CPU thread as it will be used, and it cannot be set simultaneously in multiple CPU threads.</p>
 <h2 id="samples">Samples</h2>
 <p>Nvdiffrast comes with a set of samples that were crafted to support the research paper. Each sample is available in both PyTorch and TensorFlow versions. Details such as command-line parameters, logging format, etc., may not be identical between the versions, and generally the PyTorch versions should be considered definitive. The command-line examples below are for the PyTorch versions.</p>
+<p>Enabling interactive display using the <code>--display-interval</code> parameter works on Windows but is likely to fail on Linux. Our Dockerfile is set up to support headless rendering only, and thus cannot show an interactive result window.</p>
 <h3 id="triangle.py"><a href="https://github.com/NVlabs/nvdiffrast/blob/main/samples/torch/triangle.py">triangle.py</a></h3>
 <p>This is a minimal sample that renders a triangle and saves the resulting image into a file (<code>tri.png</code>) in the current directory. Running this should be the first step to verify that you have everything set up correctly. Rendering is done using the rasterization and interpolation operations, so getting the correct output image means that both OpenGL and CUDA are working as intended under the hood.</p>
 <p>Example command line:</p>
@@ -895,9 +896,16 @@ Interactive view of pose.py
 <h2 id="pytorch-api-reference">PyTorch API reference</h2>
 <div style="padding-top: 1em;">
 <div class="apifunc"><h4><code>nvdiffrast.torch.RasterizeGLContext(<em>output_db</em>=<span class="defarg">True</span>, <em>mode</em>=<span class="defarg">'automatic'</span>, <em>device</em>=<span class="defarg">None</span>)</code>&nbsp;<span class="sym_class">Class</span></h4>
-<p class="shortdesc">Create a new OpenGL rasterizer context.</p><p class="longdesc">Creating an OpenGL context is a slow operation so you should reuse the same
+<p class="shortdesc">Create a new OpenGL rasterizer context.</p><p class="longdesc">Creating an OpenGL context is a slow operation so you should usually reuse the same
 context in all calls to <code>rasterize()</code> on the same CPU thread. The OpenGL context
-is deleted when the object is destroyed.</p><div class="arguments">Arguments:</div><table class="args"><tr class="arg"><td class="argname">output_db</td><td class="arg_short">Compute and output image-space derivates of barycentrics.</td></tr><tr class="arg"><td class="argname">mode</td><td class="arg_short">OpenGL context handling mode. Valid values are 'manual' and 'automatic'.</td></tr><tr class="arg"><td class="argname">device</td><td class="arg_short">Cuda device on which the context is created. Type can be
+is deleted when the object is destroyed.</p><p class="longdesc">Side note: When using the OpenGL context in a rasterization operation, the
+context's internal framebuffer object is automatically enlarged to accommodate the
+rasterization operation's output shape, but it is never shrunk in size until the
+context is destroyed. Thus, if you need to rasterize, say, deep low-resolution
+tensors and also shallow high-resolution tensors, you can conserve GPU memory by
+creating two separate OpenGL contexts for these tasks. In this scenario, using the
+same OpenGL context for both tasks would end up reserving GPU memory for a deep,
+high-resolution output tensor.</p><div class="arguments">Arguments:</div><table class="args"><tr class="arg"><td class="argname">output_db</td><td class="arg_short">Compute and output image-space derivates of barycentrics.</td></tr><tr class="arg"><td class="argname">mode</td><td class="arg_short">OpenGL context handling mode. Valid values are 'manual' and 'automatic'.</td></tr><tr class="arg"><td class="argname">device</td><td class="arg_short">Cuda device on which the context is created. Type can be
 <code>torch.device</code>, string (e.g., <code>'cuda:1'</code>), or int. If not
 specified, context will be created on currently active Cuda
 device.</td></tr></table><div class="methods">Methods, only available if context was created in manual mode:</div><table class="args"><tr class="arg"><td class="argname">set_context()</td><td class="arg_short">Set (activate) OpenGL context in the current CPU thread.</td></tr><tr class="arg"><td class="argname">release_context()</td><td class="arg_short">Release (deactivate) currently active OpenGL context.</td></tr></table><div class="returns">Returns:<div class="return_description">The newly created OpenGL rasterizer context.</div></div></div>
@@ -1002,9 +1010,9 @@ severity will be silent.</td></tr></table></div>
 <h2 id="licenses">Licenses</h2>
 <p>Copyright © 2020, NVIDIA Corporation. All rights reserved.</p>
 <p>This work is made available under the <a href="https://github.com/NVlabs/nvdiffrast/blob/main/LICENSE.txt">Nvidia Source Code License</a>.</p>
-<p>For business inquiries, please contact <a href="mailto:researchinquiries@nvidia.com">researchinquiries@nvidia.com</a></p>
+<p>For business inquiries, please visit our website and submit the form: <a href="https://www.nvidia.com/en-us/research/inquiries/">NVIDIA Research Licensing</a></p>
 <p>We do not currently accept outside contributions in the form of pull requests.</p>
-<p>Environment map stored as part of <code>samples/data/envphong.npz</code> is derived from a Wave Engine <a href="https://github.com/WaveEngine/Samples/tree/master/Materials/EnvironmentMap/Content/Assets/CubeMap.cubemap">sample material</a> originally shared under <a href="https://github.com/WaveEngine/Samples/blob/master/LICENSE.md">MIT License</a>. Mesh and texture stored as part of <code>samples/data/earth.npz</code> are derived from <a href="https://www.turbosquid.com/3d-models/3d-realistic-earth-photorealistic-2k-1279125">3D Earth Photorealistic 2K</a> model originally made available under <a href="https://blog.turbosquid.com/turbosquid-3d-model-license/#3d-model-license">TurboSquid 3D Model License</a>.</p>
+<p>Environment map stored as part of <code>samples/data/envphong.npz</code> is derived from a Wave Engine <a href="https://github.com/WaveEngine/Samples-2.5/tree/master/Materials/EnvironmentMap/Content/Assets/CubeMap.cubemap">sample material</a> originally shared under <a href="https://github.com/WaveEngine/Samples-2.5/blob/master/LICENSE.md">MIT License</a>. Mesh and texture stored as part of <code>samples/data/earth.npz</code> are derived from <a href="https://www.turbosquid.com/3d-models/3d-realistic-earth-photorealistic-2k-1279125">3D Earth Photorealistic 2K</a> model originally made available under <a href="https://blog.turbosquid.com/turbosquid-3d-model-license/#3d-model-license">TurboSquid 3D Model License</a>.</p>
 <h2 id="citation">Citation</h2>
 <pre><code>@article{Laine2020diffrast,
   title   = {Modular Primitives for High-Performance Differentiable Rendering},
