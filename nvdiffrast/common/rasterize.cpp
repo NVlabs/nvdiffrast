@@ -44,13 +44,21 @@ struct GLDrawCmd
 //------------------------------------------------------------------------
 // GL helpers.
 
-static void compileGLShader(NVDR_CTX_ARGS, GLuint* pShader, GLenum shaderType, const char* src)
+static void compileGLShader(NVDR_CTX_ARGS, const RasterizeGLState& s, GLuint* pShader, GLenum shaderType, const char* src_buf)
 {
-    const char* srcPtr = src;
-    int srcLength = strlen(src);
+    std::string src(src_buf);
+
+    // Set preprocessor directives.
+    int n = src.find('\n') + 1; // After first line containing #version directive.
+    if (s.enableZModify)
+        src.insert(n, "#define IF_ZMODIFY(x) x\n");
+    else
+        src.insert(n, "#define IF_ZMODIFY(x)\n");
+
+    const char *cstr = src.c_str();
     *pShader = 0;
     NVDR_CHECK_GL_ERROR(*pShader = glCreateShader(shaderType));
-    NVDR_CHECK_GL_ERROR(glShaderSource(*pShader, 1, &srcPtr, &srcLength));
+    NVDR_CHECK_GL_ERROR(glShaderSource(*pShader, 1, &cstr, 0));
     NVDR_CHECK_GL_ERROR(glCompileShader(*pShader));
 }
 
@@ -103,11 +111,16 @@ void rasterizeInitGLContext(NVDR_CTX_ARGS, RasterizeGLState& s, int cudaDeviceId
     LOG(INFO) << "OpenGL version reported as " << vMajor << "." << vMinor;
     NVDR_CHECK((vMajor == 4 && vMinor >= 4) || vMajor > 4, "OpenGL 4.4 or later is required");
 
+    // Enable depth modification workaround on A100 and later.
+    int capMajor = 0;
+    NVDR_CHECK_CUDA_ERROR(cudaDeviceGetAttribute(&capMajor, cudaDevAttrComputeCapabilityMajor, cudaDeviceIdx));
+    s.enableZModify = (capMajor >= 8);
+
     // Number of output buffers.
     int num_outputs = s.enableDB ? 2 : 1;
 
     // Set up vertex shader.
-    compileGLShader(NVDR_CTX_PARAMS, &s.glVertexShader, GL_VERTEX_SHADER,
+    compileGLShader(NVDR_CTX_PARAMS, s, &s.glVertexShader, GL_VERTEX_SHADER,
         "#version 330\n"
         "#extension GL_ARB_shader_draw_parameters : enable\n"
         STRINGIFY_SHADER_SOURCE(
@@ -132,7 +145,7 @@ void rasterizeInitGLContext(NVDR_CTX_ARGS, RasterizeGLState& s, int cudaDeviceId
         //   --> du/dX = d((u/w) / (1/w))/dX
         //   --> du/dX = [d(u/w)/dX - u*d(1/w)/dX] * w
         // and we know both d(u/w)/dX and d(1/w)/dX are constant over triangle.
-        compileGLShader(NVDR_CTX_PARAMS, &s.glGeometryShader, GL_GEOMETRY_SHADER,
+        compileGLShader(NVDR_CTX_PARAMS, s, &s.glGeometryShader, GL_GEOMETRY_SHADER,
             "#version 430\n"
             STRINGIFY_SHADER_SOURCE(
                 layout(triangles) in;
@@ -188,23 +201,29 @@ void rasterizeInitGLContext(NVDR_CTX_ARGS, RasterizeGLState& s, int cudaDeviceId
         );
 
         // Set up fragment shader.
-        compileGLShader(NVDR_CTX_PARAMS, &s.glFragmentShader, GL_FRAGMENT_SHADER,
-            "#version 330\n"
+        compileGLShader(NVDR_CTX_PARAMS, s, &s.glFragmentShader, GL_FRAGMENT_SHADER,
+            "#version 430\n"
             STRINGIFY_SHADER_SOURCE(
                 in vec4 var_uvzw;
                 in vec4 var_db;
                 layout(location = 0) out vec4 out_raster;
                 layout(location = 1) out vec4 out_db;
+                IF_ZMODIFY(
+                    layout(location = 1) uniform float in_dummy;
+                    in vec4 gl_FragCoord;
+                    out float gl_FragDepth;
+                )
                 void main()
                 {
                     out_raster = vec4(var_uvzw.x, var_uvzw.y, var_uvzw.z / var_uvzw.w, float(gl_PrimitiveID + 1));
                     out_db = var_db * var_uvzw.w;
+                    IF_ZMODIFY(gl_FragDepth = gl_FragCoord.z + in_dummy;)
                 }
             )
         );
 
         // Set up fragment shader for depth peeling.
-        compileGLShader(NVDR_CTX_PARAMS, &s.glFragmentShaderDP, GL_FRAGMENT_SHADER,
+        compileGLShader(NVDR_CTX_PARAMS, s, &s.glFragmentShaderDP, GL_FRAGMENT_SHADER,
             "#version 430\n"
             STRINGIFY_SHADER_SOURCE(
                 in vec4 var_uvzw;
@@ -212,6 +231,11 @@ void rasterizeInitGLContext(NVDR_CTX_ARGS, RasterizeGLState& s, int cudaDeviceId
                 layout(binding = 0) uniform sampler2DArray out_prev;
                 layout(location = 0) out vec4 out_raster;
                 layout(location = 1) out vec4 out_db;
+                IF_ZMODIFY(
+                    layout(location = 1) uniform float in_dummy;
+                    in vec4 gl_FragCoord;
+                    out float gl_FragDepth;
+                )
                 void main()
                 {
                     vec4 prev = texelFetch(out_prev, ivec3(gl_FragCoord.x, gl_FragCoord.y, gl_Layer), 0);
@@ -220,6 +244,7 @@ void rasterizeInitGLContext(NVDR_CTX_ARGS, RasterizeGLState& s, int cudaDeviceId
                         discard;
                     out_raster = vec4(var_uvzw.x, var_uvzw.y, depth_new, float(gl_PrimitiveID + 1));
                     out_db = var_db * var_uvzw.w;
+                    IF_ZMODIFY(gl_FragDepth = gl_FragCoord.z + in_dummy;)
                 }
             )
         );
@@ -227,7 +252,7 @@ void rasterizeInitGLContext(NVDR_CTX_ARGS, RasterizeGLState& s, int cudaDeviceId
     else
     {
         // Geometry shader without bary differential output.
-        compileGLShader(NVDR_CTX_PARAMS, &s.glGeometryShader, GL_GEOMETRY_SHADER,
+        compileGLShader(NVDR_CTX_PARAMS, s, &s.glGeometryShader, GL_GEOMETRY_SHADER,
             "#version 330\n"
             STRINGIFY_SHADER_SOURCE(
                 layout(triangles) in;
@@ -248,25 +273,36 @@ void rasterizeInitGLContext(NVDR_CTX_ARGS, RasterizeGLState& s, int cudaDeviceId
         );
 
         // Fragment shader without bary differential output.
-        compileGLShader(NVDR_CTX_PARAMS, &s.glFragmentShader, GL_FRAGMENT_SHADER,
-            "#version 330\n"
+        compileGLShader(NVDR_CTX_PARAMS, s, &s.glFragmentShader, GL_FRAGMENT_SHADER,
+            "#version 430\n"
             STRINGIFY_SHADER_SOURCE(
                 in vec4 var_uvzw;
                 layout(location = 0) out vec4 out_raster;
+                IF_ZMODIFY(
+                    layout(location = 1) uniform float in_dummy;
+                    in vec4 gl_FragCoord;
+                    out float gl_FragDepth;
+                )
                 void main()
                 {
                     out_raster = vec4(var_uvzw.x, var_uvzw.y, var_uvzw.z / var_uvzw.w, float(gl_PrimitiveID + 1));
+                    IF_ZMODIFY(gl_FragDepth = gl_FragCoord.z + in_dummy;)
                 }
             )
         );
 
         // Depth peeling variant of fragment shader.
-        compileGLShader(NVDR_CTX_PARAMS, &s.glFragmentShaderDP, GL_FRAGMENT_SHADER,
+        compileGLShader(NVDR_CTX_PARAMS, s, &s.glFragmentShaderDP, GL_FRAGMENT_SHADER,
             "#version 430\n"
             STRINGIFY_SHADER_SOURCE(
                 in vec4 var_uvzw;
                 layout(binding = 0) uniform sampler2DArray out_prev;
                 layout(location = 0) out vec4 out_raster;
+                IF_ZMODIFY(
+                    layout(location = 1) uniform float in_dummy;
+                    in vec4 gl_FragCoord;
+                    out float gl_FragDepth;
+                )
                 void main()
                 {
                     vec4 prev = texelFetch(out_prev, ivec3(gl_FragCoord.x, gl_FragCoord.y, gl_Layer), 0);
@@ -274,6 +310,7 @@ void rasterizeInitGLContext(NVDR_CTX_ARGS, RasterizeGLState& s, int cudaDeviceId
                     if (prev.w == 0 || depth_new <= prev.z)
                         discard;
                     out_raster = vec4(var_uvzw.x, var_uvzw.y, var_uvzw.z / var_uvzw.w, float(gl_PrimitiveID + 1));
+                    IF_ZMODIFY(gl_FragDepth = gl_FragCoord.z + in_dummy;)
                 }
             )
         );
@@ -327,8 +364,10 @@ void rasterizeInitGLContext(NVDR_CTX_ARGS, RasterizeGLState& s, int cudaDeviceId
     NVDR_CHECK_GL_ERROR(glGenTextures(1, &s.glPrevOutBuffer));
 }
 
-void rasterizeResizeBuffers(NVDR_CTX_ARGS, RasterizeGLState& s, int posCount, int triCount, int width, int height, int depth)
+bool rasterizeResizeBuffers(NVDR_CTX_ARGS, RasterizeGLState& s, int posCount, int triCount, int width, int height, int depth)
 {
+    bool changes = false;
+
     // Resize vertex buffer?
     if (posCount > s.posCount)
     {
@@ -338,6 +377,7 @@ void rasterizeResizeBuffers(NVDR_CTX_ARGS, RasterizeGLState& s, int posCount, in
         LOG(INFO) << "Increasing position buffer size to " << s.posCount << " float32";
         NVDR_CHECK_GL_ERROR(glBufferData(GL_ARRAY_BUFFER, s.posCount * sizeof(float), NULL, GL_DYNAMIC_DRAW));
         NVDR_CHECK_CUDA_ERROR(cudaGraphicsGLRegisterBuffer(&s.cudaPosBuffer, s.glPosBuffer, cudaGraphicsRegisterFlagsWriteDiscard));
+        changes = true;
     }
 
     // Resize triangle buffer?
@@ -349,6 +389,7 @@ void rasterizeResizeBuffers(NVDR_CTX_ARGS, RasterizeGLState& s, int posCount, in
         LOG(INFO) << "Increasing triangle buffer size to " << s.triCount << " int32";
         NVDR_CHECK_GL_ERROR(glBufferData(GL_ELEMENT_ARRAY_BUFFER, s.triCount * sizeof(int32_t), NULL, GL_DYNAMIC_DRAW));
         NVDR_CHECK_CUDA_ERROR(cudaGraphicsGLRegisterBuffer(&s.cudaTriBuffer, s.glTriBuffer, cudaGraphicsRegisterFlagsWriteDiscard));
+        changes = true;
     }
 
     // Resize framebuffer?
@@ -391,7 +432,11 @@ void rasterizeResizeBuffers(NVDR_CTX_ARGS, RasterizeGLState& s, int posCount, in
         // (Re-)register all GL buffers into Cuda.
         for (int i=0; i < num_outputs; i++)
             NVDR_CHECK_CUDA_ERROR(cudaGraphicsGLRegisterImage(&s.cudaColorBuffer[i], s.glColorBuffer[i], GL_TEXTURE_3D, cudaGraphicsRegisterFlagsReadOnly));
+
+        changes = true;
     }
+
+    return changes;
 }
 
 void rasterizeRender(NVDR_CTX_ARGS, RasterizeGLState& s, cudaStream_t stream, const float* posPtr, int posCount, int vtxPerInstance, const int32_t* triPtr, int triCount, const int32_t* rangesPtr, int width, int height, int depth, int peeling_idx)
@@ -476,6 +521,10 @@ void rasterizeRender(NVDR_CTX_ARGS, RasterizeGLState& s, cudaStream_t stream, co
     // If outputting bary differentials, set resolution uniform
     if (s.enableDB)
         NVDR_CHECK_GL_ERROR(glUniform2f(0, 2.f / (float)width, 2.f / (float)height));
+
+    // Set the dummy uniform if depth modification workaround is active.
+    if (s.enableZModify)
+        NVDR_CHECK_GL_ERROR(glUniform1f(1, 0.f));
 
     // Render the meshes.
     if (depth == 1 && !rangesPtr)

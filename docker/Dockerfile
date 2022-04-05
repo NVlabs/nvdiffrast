@@ -44,6 +44,7 @@ ENV PYOPENGL_PLATFORM egl
 
 COPY docker/10_nvidia.json /usr/share/glvnd/egl_vendor.d/10_nvidia.json
 
+RUN pip install --upgrade pip
 RUN pip install ninja imageio imageio-ffmpeg
 
 COPY nvdiffrast /tmp/pip/nvdiffrast/

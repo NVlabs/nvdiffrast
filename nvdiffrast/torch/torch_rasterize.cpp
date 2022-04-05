@@ -99,7 +99,14 @@ std::tuple<torch::Tensor, torch::Tensor> rasterize_fwd(RasterizeGLStateWrapper& 
         setGLContext(s.glctx);
 
     // Resize all buffers.
-    rasterizeResizeBuffers(NVDR_CTX_PARAMS, s, posCount, triCount, width, height, depth);
+    if (rasterizeResizeBuffers(NVDR_CTX_PARAMS, s, posCount, triCount, width, height, depth))
+    {
+#ifdef _WIN32 
+        // Workaround for occasional blank first frame on Windows.
+        releaseGLContext();
+        setGLContext(s.glctx);
+#endif
+    }
 
     // Copy input data to GL and render.
     const float* posPtr = pos.data_ptr<float>();

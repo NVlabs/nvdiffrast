@@ -70,13 +70,14 @@ struct RasterizeGLState // Must be initializable by memset to zero.
     cudaGraphicsResource_t  cudaPosBuffer;
     cudaGraphicsResource_t  cudaTriBuffer;
     int                     enableDB;
+    int                     enableZModify;      // Modify depth in shader, workaround for a rasterization issue on A100.
 };
 
 //------------------------------------------------------------------------
 // Shared C++ code prototypes.
 
 void rasterizeInitGLContext(NVDR_CTX_ARGS, RasterizeGLState& s, int cudaDeviceIdx);
-void rasterizeResizeBuffers(NVDR_CTX_ARGS, RasterizeGLState& s, int posCount, int triCount, int width, int height, int depth);
+bool rasterizeResizeBuffers(NVDR_CTX_ARGS, RasterizeGLState& s, int posCount, int triCount, int width, int height, int depth);
 void rasterizeRender(NVDR_CTX_ARGS, RasterizeGLState& s, cudaStream_t stream, const float* posPtr, int posCount, int vtxPerInstance, const int32_t* triPtr, int triCount, const int32_t* rangesPtr, int width, int height, int depth, int peeling_idx);
 void rasterizeCopyResults(NVDR_CTX_ARGS, RasterizeGLState& s, cudaStream_t stream, float** outputPtr, int width, int height, int depth);
 void rasterizeReleaseBuffers(NVDR_CTX_ARGS, RasterizeGLState& s);

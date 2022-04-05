@@ -25,6 +25,7 @@ GLUTIL_EXT(void,   glGetProgramInfoLog,         GLuint program, GLsizei bufSize,
 GLUTIL_EXT(void,   glGetProgramiv,              GLuint program, GLenum pname, GLint* param);
 GLUTIL_EXT(void,   glLinkProgram,               GLuint program);
 GLUTIL_EXT(void,   glShaderSource,              GLuint shader, GLsizei count, const char *const* string, const GLint* length);
+GLUTIL_EXT(void,   glUniform1f,                 GLint location, GLfloat v0);
 GLUTIL_EXT(void,   glUniform2f,                 GLint location, GLfloat v0, GLfloat v1);
 GLUTIL_EXT(void,   glUseProgram,                GLuint program);
 GLUTIL_EXT(void,   glVertexAttribPointer,       GLuint index, GLint size, GLenum type, GLboolean normalized, GLsizei stride, const void* pointer);

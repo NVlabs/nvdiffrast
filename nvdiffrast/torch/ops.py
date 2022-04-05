@@ -203,10 +203,6 @@ def rasterize(glctx, pos, tri, resolution, ranges=None, grad_db=True):
     the `ranges` tensor that, if specified, has to reside in CPU memory. The
     output tensors will be contiguous and reside in GPU memory.
 
-    Note: For an unknown reason, on Windows the very first rasterization call using
-    a newly created OpenGL context may *sometimes* output a blank buffer. This is a
-    known bug and has never been observed to affect subsequent calls.
-
     Args:
         glctx: OpenGL context of type `RasterizeGLContext`.
         pos: Vertex position tensor with dtype `torch.float32`. To enable range
