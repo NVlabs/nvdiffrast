@@ -11,7 +11,7 @@ Please refer to &#x261E;&#x261E; [nvdiffrast documentation](https://nvlabs.githu
 
 ## Licenses
 
-Copyright &copy; 2020, NVIDIA Corporation. All rights reserved.
+Copyright &copy; 2020&ndash;2022, NVIDIA Corporation. All rights reserved.
 
 This work is made available under the [Nvidia Source Code License](https://github.com/NVlabs/nvdiffrast/blob/main/LICENSE.txt).
 

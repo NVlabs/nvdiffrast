@@ -6,22 +6,23 @@
 # distribution of this software and related documentation without an express
 # license agreement from NVIDIA CORPORATION is strictly prohibited.
 
+import importlib
 import logging
 import numpy as np
 import os
-import sys
 import torch
 import torch.utils.cpp_extension
 
 #----------------------------------------------------------------------------
 # C++/Cuda plugin compiler/loader.
 
-_cached_plugin = None
-def _get_plugin():
+_cached_plugin = {}
+def _get_plugin(gl=False):
+    assert isinstance(gl, bool)
+
     # Return cached plugin if already loaded.
-    global _cached_plugin
-    if _cached_plugin is not None:
-        return _cached_plugin
+    if _cached_plugin.get(gl, None) is not None:
+        return _cached_plugin[gl]
 
     # Make sure we can find the necessary compiler and libary binaries.
     if os.name == 'nt':
@@ -29,7 +30,9 @@ def _get_plugin():
         def find_cl_path():
             import glob
             for edition in ['Enterprise', 'Professional', 'BuildTools', 'Community']:
-                paths = sorted(glob.glob(r"C:\Program Files (x86)\Microsoft Visual Studio\*\%s\VC\Tools\MSVC\*\bin\Hostx64\x64" % edition), reverse=True)
+                vs_relative_path = r"\Microsoft Visual Studio\*\%s\VC\Tools\MSVC\*\bin\Hostx64\x64" % edition
+                paths = sorted(glob.glob(r"C:\Program Files" + vs_relative_path), reverse=True)
+                paths += sorted(glob.glob(r"C:\Program Files (x86)" + vs_relative_path), reverse=True)
                 if paths:
                     return paths[0]
 
@@ -43,35 +46,52 @@ def _get_plugin():
     # Compiler options.
     opts = ['-DNVDR_TORCH']
 
-    # Linker options.
-    if os.name == 'posix':
-        ldflags = ['-lGL', '-lEGL']
-    elif os.name == 'nt':
-        libs = ['gdi32', 'opengl32', 'user32', 'setgpu']
-        ldflags = ['/LIBPATH:' + lib_dir] + ['/DEFAULTLIB:' + x for x in libs]
+    # Linker options for the GL-interfacing plugin.
+    ldflags = []
+    if gl:
+        if os.name == 'posix':
+            ldflags = ['-lGL', '-lEGL']
+        elif os.name == 'nt':
+            libs = ['gdi32', 'opengl32', 'user32', 'setgpu']
+            ldflags = ['/LIBPATH:' + lib_dir] + ['/DEFAULTLIB:' + x for x in libs]
 
     # List of source files.
-    source_files = [
-        '../common/common.cpp',
-        '../common/glutil.cpp',
-        '../common/rasterize.cu',
-        '../common/rasterize.cpp',
-        '../common/interpolate.cu',
-        '../common/texture.cu',
-        '../common/texture.cpp',
-        '../common/antialias.cu',
-        'torch_bindings.cpp',
-        'torch_rasterize.cpp',
-        'torch_interpolate.cpp',
-        'torch_texture.cpp',
-        'torch_antialias.cpp',
-    ]
+    if gl:
+        source_files = [
+            '../common/common.cpp',
+            '../common/glutil.cpp',
+            '../common/rasterize_gl.cpp',
+            'torch_bindings_gl.cpp',
+            'torch_rasterize_gl.cpp',
+        ]
+    else:
+        source_files = [
+            '../common/cudaraster/impl/Buffer.cpp',
+            '../common/cudaraster/impl/CudaRaster.cpp',
+            '../common/cudaraster/impl/RasterImpl.cu',
+            '../common/cudaraster/impl/RasterImpl.cpp',
+            '../common/common.cpp',
+            '../common/rasterize.cu',
+            '../common/interpolate.cu',
+            '../common/texture.cu',
+            '../common/texture.cpp',
+            '../common/antialias.cu',
+            'torch_bindings.cpp',
+            'torch_rasterize.cpp',
+            'torch_interpolate.cpp',
+            'torch_texture.cpp',
+            'torch_antialias.cpp',
+        ]
 
     # Some containers set this to contain old architectures that won't compile. We only need the one installed in the machine.
     os.environ['TORCH_CUDA_ARCH_LIST'] = ''
 
+    # On Linux, show a warning if GLEW is being forcibly loaded when compiling the GL plugin.
+    if gl and (os.name == 'posix') and ('libGLEW' in os.environ.get('LD_PRELOAD', '')):
+        logging.getLogger('nvdiffrast').warning("Warning: libGLEW is being loaded via LD_PRELOAD, and will probably conflict with the OpenGL plugin")
+
     # Try to detect if a stray lock file is left in cache directory and show a warning. This sometimes happens on Windows if the build is interrupted at just the right moment.
-    plugin_name = 'nvdiffrast_plugin'
+    plugin_name = 'nvdiffrast_plugin' + ('_gl' if gl else '')
     try:
         lock_fn = os.path.join(torch.utils.cpp_extension._get_build_directory(plugin_name, False), 'lock')
         if os.path.exists(lock_fn):
@@ -79,14 +99,27 @@ def _get_plugin():
     except:
         pass
 
+    # Speed up compilation on Windows.
+    if os.name == 'nt':
+        # Skip telemetry sending step in vcvarsall.bat
+        os.environ['VSCMD_SKIP_SENDTELEMETRY'] = '1'
+
+        # Opportunistically patch distutils to cache MSVC environments.
+        try:
+            import distutils._msvccompiler
+            import functools
+            if not hasattr(distutils._msvccompiler._get_vc_env, '__wrapped__'):
+                distutils._msvccompiler._get_vc_env = functools.lru_cache()(distutils._msvccompiler._get_vc_env)
+        except:
+            pass
+
     # Compile and load.
     source_paths = [os.path.join(os.path.dirname(__file__), fn) for fn in source_files]
-    torch.utils.cpp_extension.load(name=plugin_name, sources=source_paths, extra_cflags=opts, extra_cuda_cflags=opts, extra_ldflags=ldflags, with_cuda=True, verbose=False)
+    torch.utils.cpp_extension.load(name=plugin_name, sources=source_paths, extra_cflags=opts, extra_cuda_cflags=opts+['-lineinfo'], extra_ldflags=ldflags, with_cuda=True, verbose=False)
 
     # Import, cache, and return the compiled module.
-    import nvdiffrast_plugin
-    _cached_plugin = nvdiffrast_plugin
-    return _cached_plugin
+    _cached_plugin[gl] = importlib.import_module(plugin_name)
+    return _cached_plugin[gl]
 
 #----------------------------------------------------------------------------
 # Log level.
@@ -118,7 +151,35 @@ def set_log_level(level):
     _get_plugin().set_log_level(level)
 
 #----------------------------------------------------------------------------
-# GL State wrapper.
+# CudaRaster state wrapper.
+#----------------------------------------------------------------------------
+
+class RasterizeCudaContext:
+    def __init__(self, device=None):
+        '''Create a new Cuda rasterizer context.
+
+        The context is deleted and internal storage is released when the object is
+        destroyed.
+
+        Args:
+          device (Optional): Cuda device on which the context is created. Type can be
+                             `torch.device`, string (e.g., `'cuda:1'`), or int. If not
+                             specified, context will be created on currently active Cuda
+                             device.
+        Returns:
+          The newly created Cuda rasterizer context.
+        '''
+        if device is None:
+            cuda_device_idx = torch.cuda.current_device()
+        else:
+            with torch.cuda.device(device):
+                cuda_device_idx = torch.cuda.current_device()
+        self.cpp_wrapper = _get_plugin().RasterizeCRStateWrapper(cuda_device_idx)
+        self.output_db = True
+        self.active_depth_peeler = None
+
+#----------------------------------------------------------------------------
+# GL state wrapper.
 #----------------------------------------------------------------------------
 
 class RasterizeGLContext:
@@ -157,8 +218,8 @@ class RasterizeGLContext:
         else:
             with torch.cuda.device(device):
                 cuda_device_idx = torch.cuda.current_device()
-        self.cpp_wrapper = _get_plugin().RasterizeGLStateWrapper(output_db, mode == 'automatic', cuda_device_idx)
-        self.active_depth_peeler = None # For error checking only
+        self.cpp_wrapper = _get_plugin(gl=True).RasterizeGLStateWrapper(output_db, mode == 'automatic', cuda_device_idx)
+        self.active_depth_peeler = None # For error checking only.
 
     def set_context(self):
         '''Set (activate) OpenGL context in the current CPU thread.
@@ -180,8 +241,11 @@ class RasterizeGLContext:
 
 class _rasterize_func(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, glctx, pos, tri, resolution, ranges, grad_db, peeling_idx):
-        out, out_db = _get_plugin().rasterize_fwd(glctx.cpp_wrapper, pos, tri, resolution, ranges, peeling_idx)
+    def forward(ctx, raster_ctx, pos, tri, resolution, ranges, grad_db, peeling_idx):
+        if isinstance(raster_ctx, RasterizeGLContext):
+            out, out_db = _get_plugin(gl=True).rasterize_fwd_gl(raster_ctx.cpp_wrapper, pos, tri, resolution, ranges, peeling_idx)
+        else:
+            out, out_db = _get_plugin().rasterize_fwd_cuda(raster_ctx.cpp_wrapper, pos, tri, resolution, ranges, peeling_idx)
         ctx.save_for_backward(pos, tri, out)
         ctx.saved_grad_db = grad_db
         return out, out_db
@@ -204,7 +268,7 @@ def rasterize(glctx, pos, tri, resolution, ranges=None, grad_db=True):
     output tensors will be contiguous and reside in GPU memory.
 
     Args:
-        glctx: OpenGL context of type `RasterizeGLContext`.
+        glctx: Rasterizer context of type `RasterizeGLContext` or `RasterizeCudaContext`.
         pos: Vertex position tensor with dtype `torch.float32`. To enable range
              mode, this tensor should have a 2D shape [num_vertices, 4]. To enable
              instanced mode, use a 3D shape [minibatch_size, num_vertices, 4].
@@ -214,8 +278,8 @@ def rasterize(glctx, pos, tri, resolution, ranges=None, grad_db=True):
                 `torch.int32`, specifying start indices and counts into `tri`.
                 Ignored in instanced mode.
         grad_db: Propagate gradients of image-space derivatives of barycentrics
-                 into `pos` in backward pass. Ignored if OpenGL context was
-                 not configured to output image-space derivatives.
+                 into `pos` in backward pass. Ignored if using an OpenGL context that
+                 was not configured to output image-space derivatives.
 
     Returns:
         A tuple of two tensors. The first output tensor has shape [minibatch_size,
@@ -226,7 +290,7 @@ def rasterize(glctx, pos, tri, resolution, ranges=None, grad_db=True):
         (du/dX, du/dY, dv/dX, dv/dY). Otherwise it will be an empty tensor with shape
         [minibatch_size, height, width, 0].
     '''
-    assert isinstance(glctx, RasterizeGLContext)
+    assert isinstance(glctx, (RasterizeGLContext, RasterizeCudaContext))
     assert grad_db is True or grad_db is False
     grad_db = grad_db and glctx.output_db
 
@@ -258,7 +322,7 @@ class DepthPeeler:
         Returns:
           The newly created depth peeler.
         '''
-        assert isinstance(glctx, RasterizeGLContext)
+        assert isinstance(glctx, (RasterizeGLContext, RasterizeCudaContext))
         assert grad_db is True or grad_db is False
         grad_db = grad_db and glctx.output_db
 
@@ -271,7 +335,7 @@ class DepthPeeler:
             assert isinstance(ranges, torch.Tensor)
 
         # Store all the parameters.
-        self.glctx = glctx
+        self.raster_ctx = glctx
         self.pos = pos
         self.tri = tri
         self.resolution = resolution
@@ -280,18 +344,18 @@ class DepthPeeler:
         self.peeling_idx = None
 
     def __enter__(self):
-        if self.glctx is None:
+        if self.raster_ctx is None:
             raise RuntimeError("Cannot re-enter a terminated depth peeling operation")
-        if self.glctx.active_depth_peeler is not None:
-            raise RuntimeError("Cannot have multiple depth peelers active simultaneously in a RasterizeGLContext")
-        self.glctx.active_depth_peeler = self
+        if self.raster_ctx.active_depth_peeler is not None:
+            raise RuntimeError("Cannot have multiple depth peelers active simultaneously in a rasterization context")
+        self.raster_ctx.active_depth_peeler = self
         self.peeling_idx = 0
         return self
 
     def __exit__(self, *args):
-        assert self.glctx.active_depth_peeler is self
-        self.glctx.active_depth_peeler = None
-        self.glctx = None # Remove all references to input tensor so they're not left dangling.
+        assert self.raster_ctx.active_depth_peeler is self
+        self.raster_ctx.active_depth_peeler = None
+        self.raster_ctx = None # Remove all references to input tensor so they're not left dangling.
         self.pos = None
         self.tri = None
         self.resolution = None
@@ -309,9 +373,9 @@ class DepthPeeler:
         Returns:
           A tuple of two tensors as in `rasterize()`.
         '''
-        assert self.glctx.active_depth_peeler is self
+        assert self.raster_ctx.active_depth_peeler is self
         assert self.peeling_idx >= 0
-        result = _rasterize_func.apply(self.glctx, self.pos, self.tri, self.resolution, self.ranges, self.grad_db, self.peeling_idx)
+        result = _rasterize_func.apply(self.raster_ctx, self.pos, self.tri, self.resolution, self.ranges, self.grad_db, self.peeling_idx)
         self.peeling_idx += 1
         return result
 
@@ -603,6 +667,14 @@ def antialias(color, rast, pos, tri, topology_hash=None, pos_gradient_boost=1.0)
 
     All input tensors must be contiguous and reside in GPU memory. The output tensor
     will be contiguous and reside in GPU memory.
+
+    Note that silhouette edge determination is based on vertex indices in the triangle
+    tensor. For it to work properly, a vertex belonging to multiple triangles must be
+    referred to using the same vertex index in each triangle. Otherwise, nvdiffrast will always
+    classify the adjacent edges as silhouette edges, which leads to bad performance and
+    potentially incorrect gradients. If you are unsure whether your data is good, check
+    which pixels are modified by the antialias operation and compare to the example in the
+    documentation.
 
     Args:
         color: Input image to antialias with shape [minibatch_size, height, width, num_channels].

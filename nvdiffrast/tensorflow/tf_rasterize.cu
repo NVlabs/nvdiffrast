@@ -74,14 +74,15 @@ struct RasterizeFwdOp : public OpKernel
             setGLContext(m_glState.glctx); // (Re-)Activate GL context.
 
         // Resize all buffers.
-        rasterizeResizeBuffers(ctx, m_glState, posCount, triCount, width, height, depth); // In common/rasterize.cpp
-
-        // Newly created GL objects sometimes don't map properly to CUDA until after first context swap. Workaround.
-        if (initCtx)
+        bool changes = false;
+        rasterizeResizeBuffers(ctx, m_glState, changes, posCount, triCount, width, height, depth); // In common/rasterize_gl.cpp
+        if (changes)
         {
-            // On first execution, do a bonus context swap.
+#ifdef _WIN32
+            // Workaround for occasional blank first frame on Windows.
             releaseGLContext();
             setGLContext(m_glState.glctx);
+#endif
         }
 
         // Copy input data to GL and render.

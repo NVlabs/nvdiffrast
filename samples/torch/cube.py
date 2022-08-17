@@ -48,7 +48,8 @@ def fit_cube(max_iter          = 5000,
              out_dir           = None,
              log_fn            = None,
              mp4save_interval  = None,
-             mp4save_fn        = None):
+             mp4save_fn        = None,
+             use_opengl        = False):
 
     log_file = None
     writer = None
@@ -73,7 +74,8 @@ def fit_cube(max_iter          = 5000,
     vtx_pos = torch.from_numpy(vtxp.astype(np.float32)).cuda()
     vtx_col = torch.from_numpy(vtxc.astype(np.float32)).cuda()
 
-    glctx = dr.RasterizeGLContext()
+    # Rasterizer context
+    glctx = dr.RasterizeGLContext() if use_opengl else dr.RasterizeCudaContext()
 
     # Repeats.
     for rep in range(repeats):
@@ -161,7 +163,8 @@ def fit_cube(max_iter          = 5000,
 
 def main():
     parser = argparse.ArgumentParser(description='Cube fit example')
-    parser.add_argument('--outdir', help='Specify output directory', default='')
+    parser.add_argument('--opengl', help='enable OpenGL rendering', action='store_true', default=False)
+    parser.add_argument('--outdir', help='specify output directory', default='')
     parser.add_argument('--discontinuous', action='store_true', default=False)
     parser.add_argument('--resolution', type=int, default=0, required=True)
     parser.add_argument('--display-interval', type=int, default=0)
@@ -188,7 +191,8 @@ def main():
         out_dir=out_dir,
         log_fn='log.txt',
         mp4save_interval=args.mp4save_interval,
-        mp4save_fn='progress.mp4'
+        mp4save_fn='progress.mp4',
+        use_opengl=args.opengl
     )
 
     # Done.

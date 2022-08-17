@@ -21,7 +21,7 @@
 #include "../common/common.cpp"
 
 #include "../common/rasterize.h"
-#include "../common/rasterize.cpp"
+#include "../common/rasterize_gl.cpp"
 #include "../common/rasterize.cu"
 #include "tf_rasterize.cu"
 

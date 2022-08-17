@@ -20,7 +20,7 @@
 #define OP_RETURN_TTV   std::tuple<torch::Tensor, torch::Tensor, std::vector<torch::Tensor> >
 #define OP_RETURN_TTTTV std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, std::vector<torch::Tensor> >
 
-OP_RETURN_TT        rasterize_fwd                       (RasterizeGLStateWrapper& stateWrapper, torch::Tensor pos, torch::Tensor tri, std::tuple<int, int> resolution, torch::Tensor ranges, int depth_idx);
+OP_RETURN_TT        rasterize_fwd_cuda                  (RasterizeCRStateWrapper& stateWrapper, torch::Tensor pos, torch::Tensor tri, std::tuple<int, int> resolution, torch::Tensor ranges, int peeling_idx);
 OP_RETURN_T         rasterize_grad                      (torch::Tensor pos, torch::Tensor tri, torch::Tensor out, torch::Tensor dy);
 OP_RETURN_T         rasterize_grad_db                   (torch::Tensor pos, torch::Tensor tri, torch::Tensor out, torch::Tensor dy, torch::Tensor ddb);
 OP_RETURN_TT        interpolate_fwd                     (torch::Tensor attr, torch::Tensor rast, torch::Tensor tri);
@@ -42,9 +42,7 @@ OP_RETURN_TT        antialias_grad                      (torch::Tensor color, to
 
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
     // State classes.
-    pybind11::class_<RasterizeGLStateWrapper>(m, "RasterizeGLStateWrapper").def(pybind11::init<bool, bool, int>())
-        .def("set_context",     &RasterizeGLStateWrapper::setContext)
-        .def("release_context", &RasterizeGLStateWrapper::releaseContext);
+    pybind11::class_<RasterizeCRStateWrapper>(m, "RasterizeCRStateWrapper").def(pybind11::init<int>());
     pybind11::class_<TextureMipWrapper>(m, "TextureMipWrapper").def(pybind11::init<>());
     pybind11::class_<TopologyHashWrapper>(m, "TopologyHashWrapper");
 
@@ -53,7 +51,7 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
     m.def("set_log_level", [](int level){ FLAGS_caffe2_log_level = level; }, "set log level");
 
     // Ops.
-    m.def("rasterize_fwd",                      &rasterize_fwd,                         "rasterize forward op");
+    m.def("rasterize_fwd_cuda",                 &rasterize_fwd_cuda,                    "rasterize forward op (cuda)");
     m.def("rasterize_grad",                     &rasterize_grad,                        "rasterize gradient op ignoring db gradients");
     m.def("rasterize_grad_db",                  &rasterize_grad_db,                     "rasterize gradient op with db gradients");
     m.def("interpolate_fwd",                    &interpolate_fwd,                       "interpolate forward op with attribute derivatives");

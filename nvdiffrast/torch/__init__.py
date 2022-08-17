@@ -6,5 +6,5 @@
 # distribution of this software and related documentation without an express
 # license agreement from NVIDIA CORPORATION is strictly prohibited.
 
-from .ops import RasterizeGLContext, get_log_level, set_log_level, rasterize, DepthPeeler, interpolate, texture, texture_construct_mip, antialias, antialias_construct_topology_hash
-__all__ = ["RasterizeGLContext", "get_log_level", "set_log_level", "rasterize", "DepthPeeler", "interpolate", "texture", "texture_construct_mip", "antialias", "antialias_construct_topology_hash"]
+from .ops import RasterizeCudaContext, RasterizeGLContext, get_log_level, set_log_level, rasterize, DepthPeeler, interpolate, texture, texture_construct_mip, antialias, antialias_construct_topology_hash
+__all__ = ["RasterizeCudaContext", "RasterizeGLContext", "get_log_level", "set_log_level", "rasterize", "DepthPeeler", "interpolate", "texture", "texture_construct_mip", "antialias", "antialias_construct_topology_hash"]

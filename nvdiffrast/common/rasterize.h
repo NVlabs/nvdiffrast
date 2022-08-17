@@ -11,8 +11,29 @@
 //------------------------------------------------------------------------
 // Constants and helpers.
 
+#define RAST_CUDA_FWD_SHADER_KERNEL_BLOCK_WIDTH  8
+#define RAST_CUDA_FWD_SHADER_KERNEL_BLOCK_HEIGHT 8
 #define RAST_GRAD_MAX_KERNEL_BLOCK_WIDTH  8
 #define RAST_GRAD_MAX_KERNEL_BLOCK_HEIGHT 8
+
+//------------------------------------------------------------------------
+// CUDA forward rasterizer shader kernel params.
+
+struct RasterizeCudaFwdShaderParams
+{
+    const float*    pos;            // Vertex positions.
+    const int*      tri;            // Triangle indices.
+    const int*      in_idx;         // Triangle idx buffer from rasterizer.
+    float*          out;            // Main output buffer.
+    float*          out_db;         // Bary pixel gradient output buffer.
+    int             numTriangles;   // Number of triangles.
+    int             numVertices;    // Number of vertices.
+    int             width;          // Image width.
+    int             height;         // Image height.
+    int             depth;          // Size of minibatch.
+    int             instance_mode;  // 1 if in instance rendering mode.
+    float           xs, xo, ys, yo; // Pixel position to clip-space x, y transform.
+};
 
 //------------------------------------------------------------------------
 // Gradient CUDA kernel params.
@@ -35,52 +56,3 @@ struct RasterizeGradParams
 };
 
 //------------------------------------------------------------------------
-// Do not try to include OpenGL stuff when compiling CUDA kernels for torch.
-
-#if !(defined(NVDR_TORCH) && defined(__CUDACC__))
-#include "framework.h"
-#include "glutil.h"
-
-//------------------------------------------------------------------------
-// OpenGL-related persistent state for forward op.
-
-struct RasterizeGLState // Must be initializable by memset to zero.
-{
-    int                     width;              // Allocated frame buffer width.
-    int                     height;             // Allocated frame buffer height.
-    int                     depth;              // Allocated frame buffer depth.
-    int                     posCount;           // Allocated position buffer in floats.
-    int                     triCount;           // Allocated triangle buffer in ints.
-    GLContext               glctx;
-    GLuint                  glFBO;
-    GLuint                  glColorBuffer[2];
-    GLuint                  glPrevOutBuffer;
-    GLuint                  glDepthStencilBuffer;
-    GLuint                  glVAO;
-    GLuint                  glTriBuffer;
-    GLuint                  glPosBuffer;
-    GLuint                  glProgram;
-    GLuint                  glProgramDP;
-    GLuint                  glVertexShader;
-    GLuint                  glGeometryShader;
-    GLuint                  glFragmentShader;
-    GLuint                  glFragmentShaderDP;
-    cudaGraphicsResource_t  cudaColorBuffer[2];
-    cudaGraphicsResource_t  cudaPrevOutBuffer;
-    cudaGraphicsResource_t  cudaPosBuffer;
-    cudaGraphicsResource_t  cudaTriBuffer;
-    int                     enableDB;
-    int                     enableZModify;      // Modify depth in shader, workaround for a rasterization issue on A100.
-};
-
-//------------------------------------------------------------------------
-// Shared C++ code prototypes.
-
-void rasterizeInitGLContext(NVDR_CTX_ARGS, RasterizeGLState& s, int cudaDeviceIdx);
-bool rasterizeResizeBuffers(NVDR_CTX_ARGS, RasterizeGLState& s, int posCount, int triCount, int width, int height, int depth);
-void rasterizeRender(NVDR_CTX_ARGS, RasterizeGLState& s, cudaStream_t stream, const float* posPtr, int posCount, int vtxPerInstance, const int32_t* triPtr, int triCount, const int32_t* rangesPtr, int width, int height, int depth, int peeling_idx);
-void rasterizeCopyResults(NVDR_CTX_ARGS, RasterizeGLState& s, cudaStream_t stream, float** outputPtr, int width, int height, int depth);
-void rasterizeReleaseBuffers(NVDR_CTX_ARGS, RasterizeGLState& s);
-
-//------------------------------------------------------------------------
-#endif // !(defined(NVDR_TORCH) && defined(__CUDACC__))

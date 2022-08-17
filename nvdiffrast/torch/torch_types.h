@@ -27,6 +27,20 @@ public:
 };
 
 //------------------------------------------------------------------------
+// Python CudaRaster state wrapper.
+
+namespace CR { class CudaRaster; }
+class RasterizeCRStateWrapper
+{
+public:
+    RasterizeCRStateWrapper     (int cudaDeviceIdx);
+    ~RasterizeCRStateWrapper    (void);
+
+    CR::CudaRaster*             cr;
+    int                         cudaDeviceIdx;
+};
+
+//------------------------------------------------------------------------
 // Mipmap wrapper to prevent intrusion from Python side.
 
 class TextureMipWrapper

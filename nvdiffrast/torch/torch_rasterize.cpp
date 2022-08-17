@@ -10,55 +10,41 @@
 #include "torch_types.h"
 #include "../common/common.h"
 #include "../common/rasterize.h"
+#include "../common/cudaraster/CudaRaster.hpp"
+#include "../common/cudaraster/impl/Constants.hpp"
 #include <tuple>
 
 //------------------------------------------------------------------------
 // Kernel prototypes.
 
+void RasterizeCudaFwdShaderKernel(const RasterizeCudaFwdShaderParams p);
 void RasterizeGradKernel(const RasterizeGradParams p);
 void RasterizeGradKernelDb(const RasterizeGradParams p);
 
 //------------------------------------------------------------------------
-// Python GL state wrapper methods.
+// Python CudaRaster state wrapper methods.
 
-RasterizeGLStateWrapper::RasterizeGLStateWrapper(bool enableDB, bool automatic_, int cudaDeviceIdx_)
+RasterizeCRStateWrapper::RasterizeCRStateWrapper(int cudaDeviceIdx_)
 {
-    pState = new RasterizeGLState();
-    automatic = automatic_;
+    const at::cuda::OptionalCUDAGuard device_guard(cudaDeviceIdx_);
     cudaDeviceIdx = cudaDeviceIdx_;
-    memset(pState, 0, sizeof(RasterizeGLState));
-    pState->enableDB = enableDB ? 1 : 0;
-    rasterizeInitGLContext(NVDR_CTX_PARAMS, *pState, cudaDeviceIdx_);
-    releaseGLContext();
+    cr = new CR::CudaRaster();
 }
 
-RasterizeGLStateWrapper::~RasterizeGLStateWrapper(void)
+RasterizeCRStateWrapper::~RasterizeCRStateWrapper(void)
 {
-    setGLContext(pState->glctx);
-    rasterizeReleaseBuffers(NVDR_CTX_PARAMS, *pState);
-    releaseGLContext();
-    destroyGLContext(pState->glctx);
-    delete pState;
-}
-
-void RasterizeGLStateWrapper::setContext(void)
-{
-    setGLContext(pState->glctx);
-}
-
-void RasterizeGLStateWrapper::releaseContext(void)
-{
-    releaseGLContext();
+    const at::cuda::OptionalCUDAGuard device_guard(cudaDeviceIdx);
+    delete cr;
 }
 
 //------------------------------------------------------------------------
-// Forward op.
+// Forward op (Cuda).
 
-std::tuple<torch::Tensor, torch::Tensor> rasterize_fwd(RasterizeGLStateWrapper& stateWrapper, torch::Tensor pos, torch::Tensor tri, std::tuple<int, int> resolution, torch::Tensor ranges, int peeling_idx)
+std::tuple<torch::Tensor, torch::Tensor> rasterize_fwd_cuda(RasterizeCRStateWrapper& stateWrapper, torch::Tensor pos, torch::Tensor tri, std::tuple<int, int> resolution, torch::Tensor ranges, int peeling_idx)
 {
     const at::cuda::OptionalCUDAGuard device_guard(device_of(pos));
     cudaStream_t stream = at::cuda::getCurrentCUDAStream();
-    RasterizeGLState& s = *stateWrapper.pState;
+    CR::CudaRaster* cr = stateWrapper.cr;
 
     // Check inputs.
     NVDR_CHECK_DEVICE(pos, tri);
@@ -67,11 +53,8 @@ std::tuple<torch::Tensor, torch::Tensor> rasterize_fwd(RasterizeGLStateWrapper& 
     NVDR_CHECK_F32(pos);
     NVDR_CHECK_I32(tri, ranges);
 
-    // Check that GL context was created for the correct GPU.
-    NVDR_CHECK(pos.get_device() == stateWrapper.cudaDeviceIdx, "GL context must must reside on the same device as input tensors");
-
-    // Determine number of outputs
-    int num_outputs = s.enableDB ? 2 : 1;
+    // Check that CudaRaster context was created for the correct GPU.
+    NVDR_CHECK(pos.get_device() == stateWrapper.cudaDeviceIdx, "CudaRaster context must must reside on the same device as input tensors");
 
     // Determine instance mode and check input dimensions.
     bool instance_mode = pos.sizes().size() > 2;
@@ -87,49 +70,75 @@ std::tuple<torch::Tensor, torch::Tensor> rasterize_fwd(RasterizeGLStateWrapper& 
     // Get output shape.
     int height = std::get<0>(resolution);
     int width  = std::get<1>(resolution);
-    int depth  = instance_mode ? pos.size(0) : ranges.size(0);
+    int depth  = instance_mode ? pos.size(0) : ranges.size(0); // Depth of tensor, not related to depth buffering.
     NVDR_CHECK(height > 0 && width > 0, "resolution must be [>0, >0]");
 
-    // Get position and triangle buffer sizes in int32/float32.
-    int posCount = 4 * pos.size(0) * (instance_mode ? pos.size(1) : 1);
-    int triCount = 3 * tri.size(0);
+    // Check resolution compatibility with CudaRaster.
+    TORCH_CHECK(height <= CR_MAXVIEWPORT_SIZE && width <= CR_MAXVIEWPORT_SIZE, "resolution must be [<=", CR_MAXVIEWPORT_SIZE, ", <=", CR_MAXVIEWPORT_SIZE, "]");
+    TORCH_CHECK(((height | width) & (CR_TILE_SIZE - 1)) == 0, "width and height must be divisible by ", CR_TILE_SIZE);
 
-    // Set the GL context unless manual context.
-    if (stateWrapper.automatic)
-        setGLContext(s.glctx);
+    // Get position and triangle buffer sizes in vertices / triangles.
+    int posCount = instance_mode ? pos.size(1) : pos.size(0);
+    int triCount = tri.size(0);
 
-    // Resize all buffers.
-    if (rasterizeResizeBuffers(NVDR_CTX_PARAMS, s, posCount, triCount, width, height, depth))
-    {
-#ifdef _WIN32 
-        // Workaround for occasional blank first frame on Windows.
-        releaseGLContext();
-        setGLContext(s.glctx);
-#endif
-    }
-
-    // Copy input data to GL and render.
+    // Render.
     const float* posPtr = pos.data_ptr<float>();
     const int32_t* rangesPtr = instance_mode ? 0 : ranges.data_ptr<int32_t>(); // This is in CPU memory.
     const int32_t* triPtr = tri.data_ptr<int32_t>();
-    int vtxPerInstance = instance_mode ? pos.size(1) : 0;
-    rasterizeRender(NVDR_CTX_PARAMS, s, stream, posPtr, posCount, vtxPerInstance, triPtr, triCount, rangesPtr, width, height, depth, peeling_idx);
+
+    // Set up CudaRaster.
+    cr->setViewportSize(width, height, depth);
+    cr->setVertexBuffer((void*)posPtr, posCount);
+    cr->setIndexBuffer((void*)triPtr, triCount);
+
+    // Enable depth peeling?
+    bool enablePeel = (peeling_idx > 0);
+    cr->setRenderModeFlags(enablePeel ? CR::CudaRaster::RenderModeFlag_EnableDepthPeeling : 0); // No backface culling.
+    if (enablePeel)
+        cr->swapDepthAndPeel(); // Use previous depth buffer as peeling depth input.
+
+    // Run CudaRaster in one large batch. In case of error, the workload could be split into smaller batches - maybe do that in the future.
+    cr->deferredClear(0u);
+    bool success = cr->drawTriangles(rangesPtr, stream);
+    NVDR_CHECK(success, "subtriangle count overflow");
 
     // Allocate output tensors.
     torch::TensorOptions opts = torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCUDA);
     torch::Tensor out = torch::empty({depth, height, width, 4}, opts);
-    torch::Tensor out_db = torch::empty({depth, height, width, s.enableDB ? 4 : 0}, opts);
-    float* outputPtr[2];
-    outputPtr[0] = out.data_ptr<float>();
-    outputPtr[1] = s.enableDB ? out_db.data_ptr<float>() : NULL;
+    torch::Tensor out_db = torch::empty({depth, height, width, 4}, opts);
 
-    // Copy rasterized results into CUDA buffers.
-    rasterizeCopyResults(NVDR_CTX_PARAMS, s, stream, outputPtr, width, height, depth);
+    // Populate pixel shader kernel parameters.
+    RasterizeCudaFwdShaderParams p;
+    p.pos = posPtr;
+    p.tri = triPtr;
+    p.in_idx = (const int*)cr->getColorBuffer();
+    p.out = out.data_ptr<float>();
+    p.out_db = out_db.data_ptr<float>();
+    p.numTriangles = triCount;
+    p.numVertices = posCount;
+    p.width  = width;
+    p.height = height;
+    p.depth  = depth;
+    p.instance_mode = (pos.sizes().size() > 2) ? 1 : 0;
+    p.xs = 2.f / (float)p.width;
+    p.xo = 1.f / (float)p.width - 1.f;
+    p.ys = 2.f / (float)p.height;
+    p.yo = 1.f / (float)p.height - 1.f;
 
-    // Done. Release GL context and return.
-    if (stateWrapper.automatic)
-        releaseGLContext();
+    // Verify that buffers are aligned to allow float2/float4 operations.
+    NVDR_CHECK(!((uintptr_t)p.pos & 15),    "pos input tensor not aligned to float4");
+    NVDR_CHECK(!((uintptr_t)p.out & 15),    "out output tensor not aligned to float4");
+    NVDR_CHECK(!((uintptr_t)p.out_db & 15), "out_db output tensor not aligned to float4");
 
+    // Choose launch parameters.
+    dim3 blockSize = getLaunchBlockSize(RAST_CUDA_FWD_SHADER_KERNEL_BLOCK_WIDTH, RAST_CUDA_FWD_SHADER_KERNEL_BLOCK_HEIGHT, p.width, p.height);
+    dim3 gridSize  = getLaunchGridSize(blockSize, p.width, p.height, p.depth);
+
+    // Launch CUDA kernel.
+    void* args[] = {&p};
+    NVDR_CHECK_CUDA_ERROR(cudaLaunchKernel((void*)RasterizeCudaFwdShaderKernel, gridSize, blockSize, args, 0, stream));
+
+    // Return.
     return std::tuple<torch::Tensor, torch::Tensor>(out, out_db);
 }
 

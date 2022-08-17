@@ -47,7 +47,7 @@ def fit_earth(max_iter          = 20000,
               display_res       = 1024,
               enable_mip        = True,
               res               = 512,
-              ref_res           = 4096,
+              ref_res           = 2048,  # Dropped from 4096 to 2048 to allow using the Cuda rasterizer.
               lr_base           = 1e-2,
               lr_ramp           = 0.1,
               out_dir           = None,
@@ -55,7 +55,8 @@ def fit_earth(max_iter          = 20000,
               texsave_interval  = None,
               texsave_fn        = None,
               imgsave_interval  = None,
-              imgsave_fn        = None):
+              imgsave_fn        = None,
+              use_opengl        = False):
 
     log_file = None
     if out_dir:
@@ -64,7 +65,7 @@ def fit_earth(max_iter          = 20000,
             log_file = open(out_dir + '/' + log_fn, 'wt')
     else:
         imgsave_interval, texsave_interval = None, None
-    
+
     # Mesh and texture adapted from "3D Earth Photorealistic 2K" model at
     # https://www.turbosquid.com/3d-models/3d-realistic-earth-photorealistic-2k-1279125
     datadir = f'{pathlib.Path(__file__).absolute().parents[1]}/data'
@@ -86,7 +87,7 @@ def fit_earth(max_iter          = 20000,
 
     tex     = torch.from_numpy(tex.astype(np.float32)).cuda()
     tex_opt = torch.full(tex.shape, 0.2, device='cuda', requires_grad=True)
-    glctx = dr.RasterizeGLContext()
+    glctx = dr.RasterizeGLContext() if use_opengl else dr.RasterizeCudaContext()
 
     ang = 0.0
 
@@ -177,8 +178,9 @@ def fit_earth(max_iter          = 20000,
 
 def main():
     parser = argparse.ArgumentParser(description='Earth texture fitting example')
-    parser.add_argument('--outdir', help='Specify output directory', default='')
-    parser.add_argument('--mip', action='store_true', default=False)
+    parser.add_argument('--opengl', help='enable OpenGL rendering', action='store_true', default=False)
+    parser.add_argument('--outdir', help='specify output directory', default='')
+    parser.add_argument('--mip', help='enable mipmapping', action='store_true', default=False)
     parser.add_argument('--display-interval', type=int, default=0)
     parser.add_argument('--max-iter', type=int, default=10000)
     args = parser.parse_args()
@@ -193,7 +195,7 @@ def main():
         print ('No output directory specified, not saving log or images')
 
     # Run.
-    fit_earth(max_iter=args.max_iter, log_interval=10, display_interval=args.display_interval, enable_mip=args.mip, out_dir=out_dir, log_fn='log.txt', texsave_interval=1000, texsave_fn='tex_%06d.png', imgsave_interval=1000, imgsave_fn='img_%06d.png')
+    fit_earth(max_iter=args.max_iter, log_interval=10, display_interval=args.display_interval, enable_mip=args.mip, out_dir=out_dir, log_fn='log.txt', texsave_interval=1000, texsave_fn='tex_%06d.png', imgsave_interval=1000, imgsave_fn='img_%06d.png', use_opengl=args.opengl)
 
     # Done.
     print("Done.")

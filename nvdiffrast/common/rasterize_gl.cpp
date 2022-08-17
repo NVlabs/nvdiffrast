@@ -6,7 +6,7 @@
 // distribution of this software and related documentation without an express
 // license agreement from NVIDIA CORPORATION is strictly prohibited.
 
-#include "rasterize.h"
+#include "rasterize_gl.h"
 #include "glutil.h"
 #include <vector>
 #define STRINGIFY_SHADER_SOURCE(x) #x
@@ -210,8 +210,6 @@ void rasterizeInitGLContext(NVDR_CTX_ARGS, RasterizeGLState& s, int cudaDeviceId
                 layout(location = 1) out vec4 out_db;
                 IF_ZMODIFY(
                     layout(location = 1) uniform float in_dummy;
-                    in vec4 gl_FragCoord;
-                    out float gl_FragDepth;
                 )
                 void main()
                 {
@@ -233,8 +231,6 @@ void rasterizeInitGLContext(NVDR_CTX_ARGS, RasterizeGLState& s, int cudaDeviceId
                 layout(location = 1) out vec4 out_db;
                 IF_ZMODIFY(
                     layout(location = 1) uniform float in_dummy;
-                    in vec4 gl_FragCoord;
-                    out float gl_FragDepth;
                 )
                 void main()
                 {
@@ -280,8 +276,6 @@ void rasterizeInitGLContext(NVDR_CTX_ARGS, RasterizeGLState& s, int cudaDeviceId
                 layout(location = 0) out vec4 out_raster;
                 IF_ZMODIFY(
                     layout(location = 1) uniform float in_dummy;
-                    in vec4 gl_FragCoord;
-                    out float gl_FragDepth;
                 )
                 void main()
                 {
@@ -300,8 +294,6 @@ void rasterizeInitGLContext(NVDR_CTX_ARGS, RasterizeGLState& s, int cudaDeviceId
                 layout(location = 0) out vec4 out_raster;
                 IF_ZMODIFY(
                     layout(location = 1) uniform float in_dummy;
-                    in vec4 gl_FragCoord;
-                    out float gl_FragDepth;
                 )
                 void main()
                 {
@@ -364,9 +356,9 @@ void rasterizeInitGLContext(NVDR_CTX_ARGS, RasterizeGLState& s, int cudaDeviceId
     NVDR_CHECK_GL_ERROR(glGenTextures(1, &s.glPrevOutBuffer));
 }
 
-bool rasterizeResizeBuffers(NVDR_CTX_ARGS, RasterizeGLState& s, int posCount, int triCount, int width, int height, int depth)
+void rasterizeResizeBuffers(NVDR_CTX_ARGS, RasterizeGLState& s, bool& changes, int posCount, int triCount, int width, int height, int depth)
 {
-    bool changes = false;
+    changes = false;
 
     // Resize vertex buffer?
     if (posCount > s.posCount)
@@ -435,8 +427,6 @@ bool rasterizeResizeBuffers(NVDR_CTX_ARGS, RasterizeGLState& s, int posCount, in
 
         changes = true;
     }
-
-    return changes;
 }
 
 void rasterizeRender(NVDR_CTX_ARGS, RasterizeGLState& s, cudaStream_t stream, const float* posPtr, int posCount, int vtxPerInstance, const int32_t* triPtr, int triCount, const int32_t* rangesPtr, int width, int height, int depth, int peeling_idx)
