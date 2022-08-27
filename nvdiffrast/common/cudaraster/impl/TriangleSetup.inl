@@ -80,6 +80,12 @@ __device__ __inline__ bool prepareTriangle(
         S32 e0 = t0.x * t1.y - t0.y * t1.x;
         S32 e1 = t1.x * t2.y - t1.y * t2.x;
         S32 e2 = t2.x * t0.y - t2.y * t0.x;
+        if (area < 0)
+        {
+            e0 = -e0;
+            e1 = -e1;
+            e2 = -e2;
+        }
 
         if (e0 < 0 || e1 < 0 || e2 < 0)
         {
@@ -92,6 +98,12 @@ __device__ __inline__ bool prepareTriangle(
             e0 = t0.x * t1.y - t0.y * t1.x;
             e1 = t1.x * t2.y - t1.y * t2.x;
             e2 = t2.x * t0.y - t2.y * t0.x;
+            if (area < 0)
+            {
+                e0 = -e0;
+                e1 = -e1;
+                e2 = -e2;
+            }
 
             if (e0 < 0 || e1 < 0 || e2 < 0)
                 return false; // Between pixels.

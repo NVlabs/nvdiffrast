@@ -23,7 +23,7 @@ Buffer::Buffer(void)
 Buffer::~Buffer(void)
 {
     if (m_gpuPtr)
-        NVDR_CHECK_CUDA_ERROR(cudaFree(m_gpuPtr));
+        cudaFree(m_gpuPtr); // Don't throw an exception.
 }
 
 //------------------------------------------------------------------------
