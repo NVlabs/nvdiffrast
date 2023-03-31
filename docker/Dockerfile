@@ -15,6 +15,11 @@
 ARG BASE_IMAGE=pytorch/pytorch:1.10.0-cuda11.3-cudnn8-devel
 FROM $BASE_IMAGE
 
+# fix the GPG error:
+RUN apt-key del 7fa2af80 
+RUN apt-key adv --fetch-keys http://developer.download.nvidia.com/compute/cuda/repos/ubuntu1604/x86_64/7fa2af80.pub && \
+    apt-key adv --fetch-keys http://developer.download.nvidia.com/compute/cuda/repos/ubuntu1604/x86_64/3bf863cc.pub
+
 RUN apt-get update && apt-get install -y --no-install-recommends \
     pkg-config \
     libglvnd0 \
