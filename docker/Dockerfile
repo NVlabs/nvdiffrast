@@ -12,10 +12,9 @@
 #
 # This file defaults to pytorch/pytorch as it works on slightly older
 # driver versions.
-ARG BASE_IMAGE=pytorch/pytorch:1.10.0-cuda11.3-cudnn8-devel
-FROM $BASE_IMAGE
+FROM nvcr.io/nvidia/pytorch:23.03-py3
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     pkg-config \
     libglvnd0 \
     libgl1 \

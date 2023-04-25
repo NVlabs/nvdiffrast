@@ -34,7 +34,6 @@ rest=$@
 # Build the docker container
 if [ "$build_container" = "1" ]; then
     docker build --tag gltorch:latest -f docker/Dockerfile .
-    docker build --tag gltensorflow:latest --build-arg BASE_IMAGE=tensorflow/tensorflow:1.15.0-gpu-py3 -f docker/Dockerfile .
 fi
 
 if [ ! -f "$sample" ]; then
@@ -44,16 +43,10 @@ if [ ! -f "$sample" ]; then
 fi
 
 image="gltorch:latest"
-TENSORFLOW_CUDA_CACHE=""
-# Magically choose the tensorflow container if running a sample from the samples/tensorflow/ directory
-if [[ $sample == *"/tensorflow/"* ]]; then
-    image="gltensorflow:latest"
-    TENSORFLOW_CUDA_CACHE="-e NVDIFFRAST_CACHE_DIR=/app/tmp"
-fi
 
 echo "Using container image: $image"
 echo "Running command: $sample $rest"
 
 # Run a sample with docker
 docker run --rm -it --gpus all --user $(id -u):$(id -g) \
-    -v `pwd`:/app --workdir /app -e TORCH_EXTENSIONS_DIR=/app/tmp $TENSORFLOW_CUDA_CACHE $image python3 $sample $rest
+    -v `pwd`:/app --workdir /app -e TORCH_EXTENSIONS_DIR=/app/tmp $image python3 $sample $rest
