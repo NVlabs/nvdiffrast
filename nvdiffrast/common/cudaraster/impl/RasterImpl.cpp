@@ -109,7 +109,7 @@ void RasterImpl::swapDepthAndPeel(void)
 
 //------------------------------------------------------------------------
 
-bool RasterImpl::drawTriangles(const Vec2i* ranges, cudaStream_t stream)
+bool RasterImpl::drawTriangles(const Vec2i* ranges, bool peel, cudaStream_t stream)
 {
     bool instanceMode = (!ranges);
 
@@ -119,6 +119,7 @@ bool RasterImpl::drawTriangles(const Vec2i* ranges, cudaStream_t stream)
 
     // Resize atomics as needed.
     m_crAtomics    .grow(m_numImages * sizeof(CRAtomics));
+    m_crAtomicsHost.grow(m_numImages * sizeof(CRAtomics));
 
     // Size of these buffers doesn't depend on input.
     m_binFirstSeg  .grow(m_numImages * CR_MAXBINS_SQR * CR_BIN_STREAMS_SIZE * sizeof(S32));
@@ -127,7 +128,8 @@ bool RasterImpl::drawTriangles(const Vec2i* ranges, cudaStream_t stream)
     m_tileFirstSeg .grow(m_numImages * CR_MAXTILES_SQR * sizeof(S32));
 
     // Construct per-image parameters and determine worst-case buffer sizes.
-    std::vector<CRImageParams> imageParams(m_numImages);
+    m_crImageParamsHost.grow(m_numImages * sizeof(CRImageParams));
+    CRImageParams* imageParams = (CRImageParams*)m_crImageParamsHost.getPtr();
     for (int i=0; i < m_numImages; i++)
     {
         CRImageParams& ip = imageParams[i];
@@ -172,12 +174,15 @@ bool RasterImpl::drawTriangles(const Vec2i* ranges, cudaStream_t stream)
             m_bufferSizesReported = sizesMB << 20;
         }
 
-        // Launch stages.
-        launchStages(&imageParams[0], instanceMode, stream);
+        // Launch stages. Blocks until everything is done.
+        launchStages(instanceMode, peel, stream);
 
-        // Get atomics.
-        std::vector<CRAtomics> atomics(m_numImages);
-        NVDR_CHECK_CUDA_ERROR(cudaMemcpyAsync(&atomics[0], m_crAtomics.getPtr(), sizeof(CRAtomics) * m_numImages, cudaMemcpyDeviceToHost, stream));
+        // Peeling iteration cannot fail, so no point checking things further.
+        if (peel)
+            break;
+
+        // Atomics after coarse stage are now available.
+        CRAtomics* atomics = (CRAtomics*)m_crAtomicsHost.getPtr();
 
         // Success?
         bool failed = false;
@@ -220,19 +225,24 @@ size_t RasterImpl::getTotalBufferSizes(void) const
 
 //------------------------------------------------------------------------
 
-void RasterImpl::launchStages(const CRImageParams* imageParams, bool instanceMode, cudaStream_t stream)
+void RasterImpl::launchStages(bool instanceMode, bool peel, cudaStream_t stream)
 {
-    // Initialize atomics to mostly zero.
+    CRImageParams* imageParams = (CRImageParams*)m_crImageParamsHost.getPtr();
+
+    // Unless peeling, initialize atomics to mostly zero.
+    CRAtomics* atomics = (CRAtomics*)m_crAtomicsHost.getPtr();
+    if (!peel)
     {
-        std::vector<CRAtomics> atomics(m_numImages);
-        memset(&atomics[0], 0, m_numImages * sizeof(CRAtomics));
+        memset(atomics, 0, m_numImages * sizeof(CRAtomics));
         for (int i=0; i < m_numImages; i++)
             atomics[i].numSubtris = imageParams[i].triCount;
-        NVDR_CHECK_CUDA_ERROR(cudaMemcpyAsync(m_crAtomics.getPtr(), &atomics[0], m_numImages * sizeof(CRAtomics), cudaMemcpyHostToDevice, stream));
     }
 
-    // Copy per-image parameters if there are more than fits in launch parameter block.
-    if (m_numImages > CR_EMBED_IMAGE_PARAMS)
+    // Copy to device. If peeling, this is the state after coarse raster launch on first iteration.
+    NVDR_CHECK_CUDA_ERROR(cudaMemcpyAsync(m_crAtomics.getPtr(), atomics, m_numImages * sizeof(CRAtomics), cudaMemcpyHostToDevice, stream));
+
+    // Copy per-image parameters if there are more than fits in launch parameter block and we haven't done it already.
+    if (!peel && m_numImages > CR_EMBED_IMAGE_PARAMS)
     {
         int numImageParamsExtra = m_numImages - CR_EMBED_IMAGE_PARAMS;
         m_crImageParamsExtra.grow(numImageParamsExtra * sizeof(CRImageParams));
@@ -298,24 +308,31 @@ void RasterImpl::launchStages(const CRImageParams* imageParams, bool instanceMod
     dim3 brBlock(32, CR_BIN_WARPS);
     dim3 crBlock(32, CR_COARSE_WARPS);
     dim3 frBlock(32, m_numFineWarpsPerBlock);
-
-    // Launch stages.
     void* args[] = {&p};
-    if (instanceMode)
+
+    // Launch stages from setup to coarse and copy atomics to host only if this is not a peeling iteration.
+    if (!peel)
     {
-        int setupBlocks = (m_numTriangles - 1) / (32 * CR_SETUP_WARPS) + 1;
-        NVDR_CHECK_CUDA_ERROR(cudaLaunchKernel((void*)triangleSetupKernel, dim3(setupBlocks, 1, m_numImages), dim3(32, CR_SETUP_WARPS), args, 0, stream));
+        if (instanceMode)
+        {
+            int setupBlocks = (m_numTriangles - 1) / (32 * CR_SETUP_WARPS) + 1;
+            NVDR_CHECK_CUDA_ERROR(cudaLaunchKernel((void*)triangleSetupKernel, dim3(setupBlocks, 1, m_numImages), dim3(32, CR_SETUP_WARPS), args, 0, stream));
+        }
+        else
+        {
+            for (int i=0; i < m_numImages; i++)
+                p.totalCount += imageParams[i].triCount;
+            int setupBlocks = (p.totalCount - 1) / (32 * CR_SETUP_WARPS) + 1;
+            NVDR_CHECK_CUDA_ERROR(cudaLaunchKernel((void*)triangleSetupKernel, dim3(setupBlocks, 1, 1), dim3(32, CR_SETUP_WARPS), args, 0, stream));
+        }
+        NVDR_CHECK_CUDA_ERROR(cudaLaunchKernel((void*)binRasterKernel, dim3(CR_BIN_STREAMS_SIZE, 1, m_numImages), brBlock, args, 0, stream));
+        NVDR_CHECK_CUDA_ERROR(cudaLaunchKernel((void*)coarseRasterKernel, dim3(m_numSMs * m_numCoarseBlocksPerSM, 1, m_numImages), crBlock, args, 0, stream));
+        NVDR_CHECK_CUDA_ERROR(cudaMemcpyAsync(m_crAtomicsHost.getPtr(), m_crAtomics.getPtr(), sizeof(CRAtomics) * m_numImages, cudaMemcpyDeviceToHost, stream));
     }
-    else
-    {
-        for (int i=0; i < m_numImages; i++)
-            p.totalCount += imageParams[i].triCount;
-        int setupBlocks = (p.totalCount - 1) / (32 * CR_SETUP_WARPS) + 1;
-        NVDR_CHECK_CUDA_ERROR(cudaLaunchKernel((void*)triangleSetupKernel, dim3(setupBlocks, 1, 1), dim3(32, CR_SETUP_WARPS), args, 0, stream));
-    }
-    NVDR_CHECK_CUDA_ERROR(cudaLaunchKernel((void*)binRasterKernel, dim3(CR_BIN_STREAMS_SIZE, 1, m_numImages), brBlock, args, 0, stream));
-    NVDR_CHECK_CUDA_ERROR(cudaLaunchKernel((void*)coarseRasterKernel, dim3(m_numSMs * m_numCoarseBlocksPerSM, 1, m_numImages), crBlock, args, 0, stream));
+
+    // Fine rasterizer is launched always.
     NVDR_CHECK_CUDA_ERROR(cudaLaunchKernel((void*)fineRasterKernel, dim3(m_numSMs * m_numFineBlocksPerSM, 1, m_numImages), frBlock, args, 0, stream));
+    NVDR_CHECK_CUDA_ERROR(cudaStreamSynchronize(stream));
 }
 
 //------------------------------------------------------------------------

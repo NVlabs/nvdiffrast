@@ -26,14 +26,14 @@ public:
     void                    deferredClear           (U32 color) { m_deferredClear = true; m_clearColor = color; }
     void                    setVertexBuffer         (void* ptr, int numVertices) { m_vertexPtr = ptr; m_numVertices = numVertices; } // GPU pointer.
     void                    setIndexBuffer          (void* ptr, int numTriangles) { m_indexPtr = ptr; m_numTriangles = numTriangles; } // GPU pointer.
-    bool                    drawTriangles           (const Vec2i* ranges, cudaStream_t stream);
+    bool                    drawTriangles           (const Vec2i* ranges, bool peel, cudaStream_t stream);
     void*                   getColorBuffer          (void) { return m_colorBuffer.getPtr(); } // GPU pointer.
     void*                   getDepthBuffer          (void) { return m_depthBuffer.getPtr(); } // GPU pointer.
     void                    swapDepthAndPeel        (void);
     size_t                  getTotalBufferSizes     (void) const;
 
 private:
-    void                    launchStages            (const CRImageParams* imageParams, bool instanceMode, cudaStream_t stream);
+    void                    launchStages            (bool instanceMode, bool peel, cudaStream_t stream);
 
     // State.
 
@@ -68,6 +68,8 @@ private:
     // Global intermediate buffers. Individual images have offsets to these.
 
     Buffer                  m_crAtomics;
+    HostBuffer              m_crAtomicsHost;
+    HostBuffer              m_crImageParamsHost;
     Buffer                  m_crImageParamsExtra;
     Buffer                  m_triSubtris;
     Buffer                  m_triHeader;

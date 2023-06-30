@@ -32,4 +32,24 @@ private:
 };
 
 //------------------------------------------------------------------------
+
+class HostBuffer
+{
+public:
+                    HostBuffer  (void);
+                    ~HostBuffer (void);
+
+    void            reset       (size_t bytes);
+    void            grow        (size_t bytes);
+    void*           getPtr      (void) { return m_hostPtr; }
+    size_t          getSize     (void) const { return m_bytes; }
+
+    void            setPtr      (void* ptr) { m_hostPtr = ptr; }
+
+private:
+    void*           m_hostPtr;
+    size_t          m_bytes;
+};
+
+//------------------------------------------------------------------------
 }

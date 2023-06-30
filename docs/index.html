@@ -377,7 +377,7 @@ Examples of things we've done with nvdiffrast
 <h3 id="linux">Linux</h3>
 <p>We recommend running nvdiffrast on <a href="https://www.docker.com/">Docker</a>. To build a Docker image with nvdiffrast and PyTorch 1.6 installed, run:</p>
 <div class="sourceCode" id="cb2"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="ex">./run_sample.sh</span> --build-container</span></code></pre></div>
-<p>We recommend using Ubuntu, as some Linux distributions might not have all the required packages available — at least CentOS is reportedly problematic.</p>
+<p>We recommend using Ubuntu, as some Linux distributions might not have all the required packages available. Installation on CentOS is reportedly problematic, but success has been claimed <a href="https://github.com/NVlabs/nvdiffrast/issues/48#issuecomment-1449261808">here</a>.</p>
 <p>To try out some of the provided code examples, run:</p>
 <div class="sourceCode" id="cb3"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="ex">./run_sample.sh</span> ./samples/torch/cube.py --resolution 32</span></code></pre></div>
 <p>Alternatively, if you have all the dependencies taken care of (consult the included Dockerfile for reference), you can install nvdiffrast in your local Python site-packages by running</p>
@@ -1036,7 +1036,7 @@ severity will be silent.</td></tr></table></div>
 
 </div>
 <h2 id="licenses">Licenses</h2>
-<p>Copyright © 2020–2022, NVIDIA Corporation. All rights reserved.</p>
+<p>Copyright © 2020–2023, NVIDIA Corporation. All rights reserved.</p>
 <p>This work is made available under the <a href="https://github.com/NVlabs/nvdiffrast/blob/main/LICENSE.txt">Nvidia Source Code License</a>.</p>
 <p>For business inquiries, please visit our website and submit the form: <a href="https://www.nvidia.com/en-us/research/inquiries/">NVIDIA Research Licensing</a></p>
 <p>We do not currently accept outside contributions in the form of pull requests.</p>

@@ -446,13 +446,13 @@ static __device__ __forceinline__ float2 indexTextureLinear(const TextureKernelP
         if (iv1 >= h) iv1 -= h;
     }
 
-    // Coordinates
-    iu0 += tz * w * h;
-    iu1 += tz * w * h;
-    tcOut.x = iu0 + w * iv0;
-    tcOut.y = iu1 + w * iv0;
-    tcOut.z = iu0 + w * iv1;
-    tcOut.w = iu1 + w * iv1;
+    // Coordinates with tz folded in.
+    int iu0z = iu0 + tz * w * h;
+    int iu1z = iu1 + tz * w * h;
+    tcOut.x = iu0z + w * iv0;
+    tcOut.y = iu1z + w * iv0;
+    tcOut.z = iu0z + w * iv1;
+    tcOut.w = iu1z + w * iv1;
 
     // Invalidate texture addresses outside unit square if we are in zero mode.
     if (!CUBE_MODE && p.boundaryMode == TEX_BOUNDARY_MODE_ZERO)

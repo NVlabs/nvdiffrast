@@ -99,7 +99,7 @@ std::tuple<torch::Tensor, torch::Tensor> rasterize_fwd_cuda(RasterizeCRStateWrap
 
     // Run CudaRaster in one large batch. In case of error, the workload could be split into smaller batches - maybe do that in the future.
     cr->deferredClear(0u);
-    bool success = cr->drawTriangles(rangesPtr, stream);
+    bool success = cr->drawTriangles(rangesPtr, enablePeel, stream);
     NVDR_CHECK(success, "subtriangle count overflow");
 
     // Allocate output tensors.
