@@ -49,3 +49,17 @@ RUN pip install ninja imageio imageio-ffmpeg
 COPY nvdiffrast /tmp/pip/nvdiffrast/
 COPY README.md setup.py /tmp/pip/
 RUN cd /tmp/pip && pip install .
+
+# Custom code
+RUN apt-get update
+RUN python -m pip install --upgrade pip
+RUN pip install kornia dominate trimesh tensorflow scikit-image
+# Clone Deep3DFaceRecon_pytorch repo and cd into it
+RUN git clone https://github.com/sicxu/Deep3DFaceRecon_pytorch.git
+RUN cd Deep3DFaceRecon_pytorch/  # /workspace/Deep3DFaceRecon_pytorch
+# Clone insightface repo and copy model over to Deep3DFaceRecon_pytorch models dir
+RUN git clone https://github.com/deepinsight/insightface.git
+RUN cp -r /workspace/insightface/recognition/arcface_torch /workspace/Deep3DFaceRecon_pytorch/models/
+
+
+
