@@ -1,6 +1,6 @@
 # Facial Expression Recognition
 
-This repository is used for academic purposes and was forked from [nvdiffrast](https://nvlabs.github.io/nvidffrast).
+This repository is used for academic purposes and was forked from [nvdiffrast](https://github.com/NVlabs/nvdiffrast).
 
 ## Setup
 
