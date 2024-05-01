@@ -115,13 +115,19 @@ def _get_plugin(gl=False):
                 distutils._msvccompiler._get_vc_env = functools.lru_cache()(distutils._msvccompiler._get_vc_env)
         except:
             pass
-        # Detect Visual Studio include and library paths
-            vspath = os.environ.get('VSPATH')
-        if vspath is not None:
-            vs_include_path = os.path.join(vspath, 'VC', 'Tools', 'MSVC', '*', 'include')
-            vs_lib_path = os.path.join(vspath, 'VC', 'Tools', 'MSVC', '*', 'lib', 'x64')
-            opts += [f'-I{vs_include_path}']
-            ldflags += [f'-LIBPATH:{vs_lib_path}']
+
+    # Detect Visual Studio include and library paths
+    vspath = os.environ.get('VSPATH')
+    vs_include_path = None
+    vs_lib_path = None
+    if vspath is not None:
+        vs_include_path = os.path.join(vspath, 'VC', 'Tools', 'MSVC', '*', 'include')
+        vs_lib_path = os.path.join(vspath, 'VC', 'Tools', 'MSVC', '*', 'lib', 'x64')
+
+    if vs_include_path is not None:
+        opts += [f'-I{vs_include_path}']
+    if vs_lib_path is not None:
+        ldflags += [f'-LIBPATH:{vs_lib_path}']
 
     # Compile and load.
     source_paths = [os.path.join(os.path.dirname(__file__), fn) for fn in source_files]
