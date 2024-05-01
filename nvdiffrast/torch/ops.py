@@ -29,12 +29,15 @@ def _get_plugin(gl=False):
         lib_dir = os.path.dirname(__file__) + r"\..\lib"
         def find_cl_path():
             import glob
-            for edition in ['Enterprise', 'Professional', 'BuildTools', 'Community']:
-                vs_relative_path = r"\Microsoft Visual Studio\*\%s\VC\Tools\MSVC\*\bin\Hostx64\x64" % edition
-                paths = sorted(glob.glob(r"C:\Program Files" + vs_relative_path), reverse=True)
-                paths += sorted(glob.glob(r"C:\Program Files (x86)" + vs_relative_path), reverse=True)
-                if paths:
-                    return paths[0]
+            def get_sort_key(x):
+                x = x.split('\\')[3:]
+                x[1] = {'BuildTools': '~0', 'Community': '~1', 'Pro': '~2', 'Professional': '~3', 'Enterprise': '~4'}.get(x[1], x[1])
+                return x
+            vs_relative_path = r"\Microsoft Visual Studio\*\*\VC\Tools\MSVC\*\bin\Hostx64\x64"
+            paths = glob.glob(r"C:\Program Files" + vs_relative_path)
+            paths += glob.glob(r"C:\Program Files (x86)" + vs_relative_path)
+            if paths:
+                return sorted(paths, key=get_sort_key)[-1]
 
         # If cl.exe is not on path, try to find it.
         if os.system("where cl.exe >nul 2>nul") != 0:
@@ -113,9 +116,25 @@ def _get_plugin(gl=False):
         except:
             pass
 
+    # Detect Visual Studio include and library paths
+    vspath = os.environ.get('VSPATH')
+    vs_include_path = None
+    vs_lib_path = None
+    if vspath is not None:
+        vs_include_path = os.path.join(vspath, 'VC', 'Tools', 'MSVC', '*', 'include')
+        vs_lib_path = os.path.join(vspath, 'VC', 'Tools', 'MSVC', '*', 'lib', 'x64')
+
+    if vs_include_path is not None:
+        opts += [f'-I{vs_include_path}']
+    if vs_lib_path is not None:
+        ldflags += [f'-LIBPATH:{vs_lib_path}']
+
     # Compile and load.
     source_paths = [os.path.join(os.path.dirname(__file__), fn) for fn in source_files]
-    torch.utils.cpp_extension.load(name=plugin_name, sources=source_paths, extra_cflags=opts, extra_cuda_cflags=opts+['-lineinfo'], extra_ldflags=ldflags, with_cuda=True, verbose=False)
+    import sysconfig
+    python_include_path = sysconfig.get_path('include')
+
+    torch.utils.cpp_extension.load(name=plugin_name, sources=source_paths, extra_cflags=opts + [f'-I{python_include_path}'], extra_cuda_cflags=opts+['-lineinfo', f'-I{python_include_path}'], extra_ldflags=ldflags, with_cuda=True, verbose=True)
 
     # Import, cache, and return the compiled module.
     _cached_plugin[gl] = importlib.import_module(plugin_name)
