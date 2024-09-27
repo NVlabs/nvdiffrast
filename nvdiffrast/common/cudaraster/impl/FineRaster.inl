@@ -74,8 +74,8 @@ __device__ __inline__ bool earlyZCull(uint4 triHeader, U32 tileZMax)
 
 __device__ __inline__ U64 trianglePixelCoverage(const CRParams& p, const uint4& triHeader, int tileX, int tileY, volatile U64* s_cover8x8_lut)
 {
-    int baseX = (tileX << (CR_TILE_LOG2 + CR_SUBPIXEL_LOG2)) - ((p.widthPixels  - 1) << (CR_SUBPIXEL_LOG2 - 1));
-    int baseY = (tileY << (CR_TILE_LOG2 + CR_SUBPIXEL_LOG2)) - ((p.heightPixels - 1) << (CR_SUBPIXEL_LOG2 - 1));
+    int baseX = (tileX << (CR_TILE_LOG2 + CR_SUBPIXEL_LOG2)) - ((p.widthPixelsVp  - 1) << (CR_SUBPIXEL_LOG2 - 1));
+    int baseY = (tileY << (CR_TILE_LOG2 + CR_SUBPIXEL_LOG2)) - ((p.heightPixelsVp - 1) << (CR_SUBPIXEL_LOG2 - 1));
 
     // extract S16 vertex positions while subtracting tile coordinates
     S32 v0x  = sub_s16lo_s16lo(triHeader.x, baseX);

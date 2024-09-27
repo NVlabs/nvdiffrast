@@ -38,6 +38,7 @@ RasterImpl::RasterImpl(void)
 
     m_numImages             (0),
     m_sizePixels            (0, 0),
+    m_sizeVp                (0, 0),
     m_sizeBins              (0, 0),
     m_numBins               (0),
     m_sizeTiles             (0, 0),
@@ -82,11 +83,13 @@ RasterImpl::~RasterImpl(void)
 
 void RasterImpl::setViewportSize(Vec3i size)
 {
-    if ((size.x | size.y) & (CR_TILE_SIZE - 1))
-        return; // Invalid size.
+    // Internally round buffer sizes to multiples of 8.
+    int w = (size.x + CR_TILE_SIZE - 1) & (-CR_TILE_SIZE);
+    int h = (size.y + CR_TILE_SIZE - 1) & (-CR_TILE_SIZE);
 
     m_numImages     = size.z;
-    m_sizePixels    = Vec2i(size.x, size.y);
+    m_sizePixels    = Vec2i(w, h);
+    m_sizeVp        = Vec2i(size.x, size.y);
     m_sizeTiles.x   = m_sizePixels.x >> CR_TILE_LOG2;
     m_sizeTiles.y   = m_sizePixels.y >> CR_TILE_LOG2;
     m_numTiles      = m_sizeTiles.x * m_sizeTiles.y;
@@ -264,6 +267,8 @@ void RasterImpl::launchStages(bool instanceMode, bool peel, cudaStream_t stream)
 
         p.widthPixels       = m_sizePixels.x;
         p.heightPixels      = m_sizePixels.y;
+        p.widthPixelsVp     = m_sizeVp.x;
+        p.heightPixelsVp    = m_sizeVp.y;
         p.widthBins         = m_sizeBins.x;
         p.heightBins        = m_sizeBins.y;
         p.numBins           = m_numBins;

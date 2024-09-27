@@ -31,7 +31,7 @@ static __forceinline__ __device__ void InterpolateFwdKernelTemplate(const Interp
 
     // Fetch rasterizer output.
     float4 r = ((float4*)p.rast)[pidx];
-    int triIdx = (int)r.w - 1;
+    int triIdx = float_to_triidx(r.w) - 1;
     bool triValid = (triIdx >= 0 && triIdx < p.numTriangles);
 
     // If no geometry in entire warp, zero the output and exit.
@@ -132,7 +132,7 @@ template <bool ENABLE_DA>
 static __forceinline__ __device__ void InterpolateGradKernelTemplate(const InterpolateKernelParams p)
 {
     // Temporary space for coalesced atomics.
-    CA_DECLARE_TEMP(IP_GRAD_MAX_KERNEL_BLOCK_WIDTH * IP_GRAD_MAX_KERNEL_BLOCK_HEIGHT);    
+    CA_DECLARE_TEMP(IP_GRAD_MAX_KERNEL_BLOCK_WIDTH * IP_GRAD_MAX_KERNEL_BLOCK_HEIGHT);
 
     // Calculate pixel position.
     int px = blockIdx.x * blockDim.x + threadIdx.x;
@@ -146,7 +146,7 @@ static __forceinline__ __device__ void InterpolateGradKernelTemplate(const Inter
 
     // Fetch triangle ID. If none, output zero bary/db gradients and exit.
     float4 r = ((float4*)p.rast)[pidx];
-    int triIdx = (int)r.w - 1;
+    int triIdx = float_to_triidx(r.w) - 1;
     if (triIdx < 0 || triIdx >= p.numTriangles)
     {
         ((float4*)p.gradRaster)[pidx] = make_float4(0.f, 0.f, 0.f, 0.f);

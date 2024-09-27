@@ -199,8 +199,8 @@ __device__ __inline__ void binRasterImpl(const CRParams p)
             U32 hasTriMask = __ballot_sync(~0u, hasTri);
             if (hasTri)
             {
-                S32 v0x = add_s16lo_s16lo(triData.x, p.widthPixels  * (CR_SUBPIXEL_SIZE >> 1));
-                S32 v0y = add_s16hi_s16lo(triData.x, p.heightPixels * (CR_SUBPIXEL_SIZE >> 1));
+                S32 v0x = add_s16lo_s16lo(triData.x, p.widthPixelsVp  * (CR_SUBPIXEL_SIZE >> 1));
+                S32 v0y = add_s16hi_s16lo(triData.x, p.heightPixelsVp * (CR_SUBPIXEL_SIZE >> 1));
                 S32 d01x = sub_s16lo_s16lo(triData.y, triData.x);
                 S32 d01y = sub_s16hi_s16hi(triData.y, triData.x);
                 S32 d02x = sub_s16lo_s16lo(triData.z, triData.x);

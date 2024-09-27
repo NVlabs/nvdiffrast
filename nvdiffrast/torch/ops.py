@@ -29,12 +29,16 @@ def _get_plugin(gl=False):
         lib_dir = os.path.dirname(__file__) + r"\..\lib"
         def find_cl_path():
             import glob
-            for edition in ['Enterprise', 'Professional', 'BuildTools', 'Community']:
-                vs_relative_path = r"\Microsoft Visual Studio\*\%s\VC\Tools\MSVC\*\bin\Hostx64\x64" % edition
-                paths = sorted(glob.glob(r"C:\Program Files" + vs_relative_path), reverse=True)
-                paths += sorted(glob.glob(r"C:\Program Files (x86)" + vs_relative_path), reverse=True)
-                if paths:
-                    return paths[0]
+            def get_sort_key(x):
+                # Primary criterion is VS version, secondary is edition, third is internal MSVC version.
+                x = x.split('\\')[3:]
+                x[1] = {'BuildTools': '~0', 'Community': '~1', 'Pro': '~2', 'Professional': '~3', 'Enterprise': '~4'}.get(x[1], x[1])
+                return x
+            vs_relative_path = r"\Microsoft Visual Studio\*\*\VC\Tools\MSVC\*\bin\Hostx64\x64"
+            paths = glob.glob(r"C:\Program Files" + vs_relative_path)
+            paths += glob.glob(r"C:\Program Files (x86)" + vs_relative_path)
+            if paths:
+                return sorted(paths, key=get_sort_key)[-1]
 
         # If cl.exe is not on path, try to find it.
         if os.system("where cl.exe >nul 2>nul") != 0:
@@ -44,7 +48,10 @@ def _get_plugin(gl=False):
             os.environ['PATH'] += ';' + cl_path
 
     # Compiler options.
-    opts = ['-DNVDR_TORCH']
+    common_opts = ['-DNVDR_TORCH']
+    cc_opts = []
+    if os.name == 'nt':
+        cc_opts += ['/wd4067', '/wd4624'] # Disable warnings in torch headers.
 
     # Linker options for the GL-interfacing plugin.
     ldflags = []
@@ -115,7 +122,7 @@ def _get_plugin(gl=False):
 
     # Compile and load.
     source_paths = [os.path.join(os.path.dirname(__file__), fn) for fn in source_files]
-    torch.utils.cpp_extension.load(name=plugin_name, sources=source_paths, extra_cflags=opts, extra_cuda_cflags=opts+['-lineinfo'], extra_ldflags=ldflags, with_cuda=True, verbose=False)
+    torch.utils.cpp_extension.load(name=plugin_name, sources=source_paths, extra_cflags=common_opts+cc_opts, extra_cuda_cflags=common_opts+['-lineinfo'], extra_ldflags=ldflags, with_cuda=True, verbose=False)
 
     # Import, cache, and return the compiled module.
     _cached_plugin[gl] = importlib.import_module(plugin_name)

@@ -28,8 +28,10 @@ struct RasterizeCudaFwdShaderParams
     float*          out_db;         // Bary pixel gradient output buffer.
     int             numTriangles;   // Number of triangles.
     int             numVertices;    // Number of vertices.
-    int             width;          // Image width.
-    int             height;         // Image height.
+    int             width_in;       // Input image width.
+    int             height_in;      // Input image height.
+    int             width_out;      // Output image width.
+    int             height_out;     // Output image height.
     int             depth;          // Size of minibatch.
     int             instance_mode;  // 1 if in instance rendering mode.
     float           xs, xo, ys, yo; // Pixel position to clip-space x, y transform.

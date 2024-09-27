@@ -128,8 +128,8 @@ __device__ __inline__ void coarseRasterImpl(const CRParams p)
 
         int binY = idiv_fast(binIdx, p.widthBins);
         int binX = binIdx - binY * p.widthBins;
-        int originX = (binX << (CR_BIN_LOG2 + tileLog)) - (p.widthPixels << (CR_SUBPIXEL_LOG2 - 1));
-        int originY = (binY << (CR_BIN_LOG2 + tileLog)) - (p.heightPixels << (CR_SUBPIXEL_LOG2 - 1));
+        int originX = (binX << (CR_BIN_LOG2 + tileLog)) - (p.widthPixelsVp << (CR_SUBPIXEL_LOG2 - 1));
+        int originY = (binY << (CR_BIN_LOG2 + tileLog)) - (p.heightPixelsVp << (CR_SUBPIXEL_LOG2 - 1));
         int maxTileXInBin = ::min(p.widthTiles - (binX << CR_BIN_LOG2), CR_BIN_SIZE) - 1;
         int maxTileYInBin = ::min(p.heightTiles - (binY << CR_BIN_LOG2), CR_BIN_SIZE) - 1;
         int binTileIdx = (binX + binY * p.widthTiles) << CR_BIN_LOG2;

@@ -18,19 +18,20 @@ __global__ void RasterizeCudaFwdShaderKernel(const RasterizeCudaFwdShaderParams 
     int px = blockIdx.x * blockDim.x + threadIdx.x;
     int py = blockIdx.y * blockDim.y + threadIdx.y;
     int pz = blockIdx.z;
-    if (px >= p.width || py >= p.height || pz >= p.depth)
+    if (px >= p.width_out || py >= p.height_out || pz >= p.depth)
         return;
 
-    // Pixel index.
-    int pidx = px + p.width * (py + p.height * pz);
+    // Pixel indices.
+    int pidx_in  = px + p.width_in  * (py + p.height_in  * pz);
+    int pidx_out = px + p.width_out * (py + p.height_out * pz);
 
     // Fetch triangle idx.
-    int triIdx = p.in_idx[pidx] - 1;
+    int triIdx = p.in_idx[pidx_in] - 1;
     if (triIdx < 0 || triIdx >= p.numTriangles)
     {
         // No or corrupt triangle.
-        ((float4*)p.out)[pidx] = make_float4(0.0, 0.0, 0.0, 0.0); // Clear out.
-        ((float4*)p.out_db)[pidx] = make_float4(0.0, 0.0, 0.0, 0.0); // Clear out_db.
+        ((float4*)p.out)[pidx_out] = make_float4(0.0, 0.0, 0.0, 0.0); // Clear out.
+        ((float4*)p.out_db)[pidx_out] = make_float4(0.0, 0.0, 0.0, 0.0); // Clear out_db.
         return;
     }
 
@@ -87,7 +88,7 @@ __global__ void RasterizeCudaFwdShaderKernel(const RasterizeCudaFwdShaderParams 
     zw = fmaxf(fminf(zw, 1.f), -1.f);
 
     // Emit output.
-    ((float4*)p.out)[pidx] = make_float4(b0, b1, zw, (float)(triIdx + 1));
+    ((float4*)p.out)[pidx_out] = make_float4(b0, b1, zw, triidx_to_float(triIdx + 1));
 
     // Calculate bary pixel differentials.
     float dfxdx = p.xs * iw;
@@ -106,7 +107,7 @@ __global__ void RasterizeCudaFwdShaderKernel(const RasterizeCudaFwdShaderParams 
     float dvdy = dfydy * (b1 * datdy - da1dy);
 
     // Emit bary pixel differentials.
-    ((float4*)p.out_db)[pidx] = make_float4(dudx, dudy, dvdx, dvdy);
+    ((float4*)p.out_db)[pidx_out] = make_float4(dudx, dudy, dvdx, dvdy);
 }
 
 //------------------------------------------------------------------------
@@ -131,7 +132,7 @@ static __forceinline__ __device__ void RasterizeGradKernelTemplate(const Rasteri
     // Read triangle idx and dy.
     float2 dy  = ((float2*)p.dy)[pidx * 2];
     float4 ddb = ENABLE_DB ? ((float4*)p.ddb)[pidx] : make_float4(0.f, 0.f, 0.f, 0.f);
-    int triIdx = (int)(((float*)p.out)[pidx * 4 + 3]) - 1;
+    int triIdx = float_to_triidx(((float*)p.out)[pidx * 4 + 3]) - 1;
 
     // Exit if nothing to do.
     if (triIdx < 0 || triIdx >= p.numTriangles)
@@ -240,7 +241,7 @@ static __forceinline__ __device__ void RasterizeGradKernelTemplate(const Rasteri
         float a1p0 = fx * p2.y - fy * p2.x;
         float a1p2 = fy * p0.x - fx * p0.y;
 
-        float wdudX = 2.f * b0 * datdX - da0dX; 
+        float wdudX = 2.f * b0 * datdX - da0dX;
         float wdudY = 2.f * b0 * datdY - da0dY;
         float wdvdX = 2.f * b1 * datdX - da1dX;
         float wdvdY = 2.f * b1 * datdY - da1dY;

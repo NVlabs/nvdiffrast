@@ -40,13 +40,13 @@ TopologyHashWrapper antialias_construct_topology_hash(torch::Tensor tri)
     p.tri = tri.data_ptr<int>();
 
     // Kernel parameters.
-    p.allocTriangles = p.allocTriangles < 64 ? 64 : p.allocTriangles;
+    p.allocTriangles = 64;
     while (p.allocTriangles < p.numTriangles)
         p.allocTriangles <<= 1; // Must be power of two.
 
     // Construct the hash tensor and get pointer.
     torch::TensorOptions opts = torch::TensorOptions().dtype(torch::kInt32).device(torch::kCUDA);
-    torch::Tensor ev_hash = torch::zeros({p.allocTriangles * AA_HASH_ELEMENTS_PER_TRIANGLE * 4}, opts);
+    torch::Tensor ev_hash = torch::zeros({(uint64_t)p.allocTriangles * AA_HASH_ELEMENTS_PER_TRIANGLE(p.allocTriangles) * 4}, opts);
     p.evHash = (uint4*)(ev_hash.data_ptr<int>());
 
     // Check alignment.
@@ -113,7 +113,11 @@ std::tuple<torch::Tensor, torch::Tensor> antialias_fwd(torch::Tensor color, torc
     // Misc parameters.
     p.xh = .5f * (float)p.width;
     p.yh = .5f * (float)p.height;
-    p.allocTriangles = topology_hash.size(0) / (4 * AA_HASH_ELEMENTS_PER_TRIANGLE);
+
+    // Determine hash allocation size.
+    p.allocTriangles = 64;
+    while (p.allocTriangles < p.numTriangles)
+        p.allocTriangles <<= 1; // Must be power of two.
 
     // Allocate output tensors.
     torch::Tensor out = color.detach().clone(); // Use color as base.

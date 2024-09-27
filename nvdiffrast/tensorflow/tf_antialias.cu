@@ -109,12 +109,12 @@ struct AntialiasFwdOp : public OpKernel
                
                 // (Re-)allocate memory for the hash.
                 OP_CHECK_CUDA_ERROR(ctx, cudaFree(p.evHash));
-                OP_CHECK_CUDA_ERROR(ctx, cudaMalloc(&p.evHash, p.allocTriangles * AA_HASH_ELEMENTS_PER_TRIANGLE * sizeof(uint4)));
+                OP_CHECK_CUDA_ERROR(ctx, cudaMalloc(&p.evHash, p.allocTriangles * AA_HASH_ELEMENTS_PER_TRIANGLE(p.allocTriangles) * sizeof(uint4)));
                 LOG(INFO) << "Increasing topology hash size to accommodate " << p.allocTriangles << " triangles";
             }
 
             // Clear the hash and launch the mesh kernel to populate it.
-            OP_CHECK_CUDA_ERROR(ctx, cudaMemsetAsync(p.evHash, 0, p.allocTriangles * AA_HASH_ELEMENTS_PER_TRIANGLE * sizeof(uint4), stream));
+            OP_CHECK_CUDA_ERROR(ctx, cudaMemsetAsync(p.evHash, 0, p.allocTriangles * AA_HASH_ELEMENTS_PER_TRIANGLE(p.allocTriangles) * sizeof(uint4), stream));
             OP_CHECK_CUDA_ERROR(ctx, cudaLaunchKernel((void*)AntialiasFwdMeshKernel, (p.numTriangles - 1) / AA_MESH_KERNEL_THREADS_PER_BLOCK + 1, AA_MESH_KERNEL_THREADS_PER_BLOCK, args, 0, stream));
         }
 

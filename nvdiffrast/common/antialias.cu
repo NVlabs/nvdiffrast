@@ -64,7 +64,7 @@ class HashIndex
 public:
     __device__ __forceinline__ HashIndex(const AntialiasKernelParams& p, uint64_t key)
     {
-        m_mask = p.allocTriangles * AA_HASH_ELEMENTS_PER_TRIANGLE - 1;
+        m_mask = (p.allocTriangles << AA_LOG_HASH_ELEMENTS_PER_TRIANGLE(p.allocTriangles)) - 1; // This should work until triangle count exceeds 1073741824.
         m_idx  = (uint32_t)(key & 0xffffffffu);
         m_skip = (uint32_t)(key >> 32);
         uint32_t dummy = JENKINS_MAGIC;
@@ -173,7 +173,7 @@ __global__ void AntialiasFwdDiscontinuityKernel(const AntialiasKernelParams p)
 
     // Pointer to our TriIdx and fetch.
     int pidx0 = ((px + p.width * (py + p.height * pz)) << 2) + 3;
-    float tri0 = p.rasterOut[pidx0];
+    float tri0 = p.rasterOut[pidx0]; // These can stay as float, as we only compare them against each other.
 
     // Look right, clamp at edge.
     int pidx1 = pidx0;
@@ -242,8 +242,8 @@ __global__ void AntialiasFwdAnalysisKernel(const AntialiasKernelParams p)
         int pixel1 = pixel0 + (d ? p.width : 1);
         float2 zt0 = ((float2*)p.rasterOut)[(pixel0 << 1) + 1];
         float2 zt1 = ((float2*)p.rasterOut)[(pixel1 << 1) + 1];
-        int tri0 = (int)zt0.y - 1;
-        int tri1 = (int)zt1.y - 1;
+        int tri0 = float_to_triidx(zt0.y) - 1;
+        int tri1 = float_to_triidx(zt1.y) - 1;
 
         // Select triangle based on background / depth.
         int tri = (tri0 >= 0) ? tri0 : tri1;
@@ -280,8 +280,8 @@ __global__ void AntialiasFwdAnalysisKernel(const AntialiasKernelParams p)
         if (p.instance_mode)
         {
             int vbase = pz * p.numVertices;
-            vi0 += vbase; 
-            vi1 += vbase; 
+            vi0 += vbase;
+            vi1 += vbase;
             vi2 += vbase;
             if (op0 >= 0) op0 += vbase;
             if (op1 >= 0) op1 += vbase;
@@ -420,7 +420,7 @@ __global__ void AntialiasGradKernel(const AntialiasKernelParams p)
         float ds = __int_as_float(__float_as_int(1.0) | (tri1 << 31));
         int pixel0 = px + p.width * (py + p.height * pz);
         int pixel1 = pixel0 + (d ? p.width : 1);
-        int tri = (int)p.rasterOut[((tri1 ? pixel1 : pixel0) << 2) + 3] - 1;
+        int tri = float_to_triidx(p.rasterOut[((tri1 ? pixel1 : pixel0) << 2) + 3]) - 1;
         if (tri1)
         {
             px += 1 - d;
@@ -478,7 +478,7 @@ __global__ void AntialiasGradKernel(const AntialiasKernelParams p)
         amask = __ballot_sync(amask, !vtxFail);
         if (vtxFail)
             continue;
-    
+
         // Instance mode: Adjust vertex indices based on minibatch index.
         if (p.instance_mode)
         {

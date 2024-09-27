@@ -13,8 +13,8 @@ __device__ __inline__ void snapTriangle(
     float4 v0, float4 v1, float4 v2,
     int2& p0, int2& p1, int2& p2, float3& rcpW, int2& lo, int2& hi)
 {
-    F32 viewScaleX = (F32)(p.widthPixels  << (CR_SUBPIXEL_LOG2 - 1));
-    F32 viewScaleY = (F32)(p.heightPixels << (CR_SUBPIXEL_LOG2 - 1));
+    F32 viewScaleX = (F32)(p.widthPixelsVp  << (CR_SUBPIXEL_LOG2 - 1));
+    F32 viewScaleY = (F32)(p.heightPixelsVp << (CR_SUBPIXEL_LOG2 - 1));
     rcpW = make_float3(1.0f / v0.w, 1.0f / v1.w, 1.0f / v2.w);
     p0 = make_int2(f32_to_s32_sat(v0.x * rcpW.x * viewScaleX), f32_to_s32_sat(v0.y * rcpW.x * viewScaleY));
     p1 = make_int2(f32_to_s32_sat(v1.x * rcpW.y * viewScaleX), f32_to_s32_sat(v1.y * rcpW.y * viewScaleY));
@@ -59,8 +59,8 @@ __device__ __inline__ bool prepareTriangle(
     // AABB falls between samples => cull.
 
     int sampleSize = 1 << CR_SUBPIXEL_LOG2;
-    int biasX = (p.widthPixels  << (CR_SUBPIXEL_LOG2 - 1)) - (sampleSize >> 1);
-    int biasY = (p.heightPixels << (CR_SUBPIXEL_LOG2 - 1)) - (sampleSize >> 1);
+    int biasX = (p.widthPixelsVp  << (CR_SUBPIXEL_LOG2 - 1)) - (sampleSize >> 1);
+    int biasY = (p.heightPixelsVp << (CR_SUBPIXEL_LOG2 - 1)) - (sampleSize >> 1);
     int lox = (int)add_add(lo.x, sampleSize - 1, biasX) & -sampleSize;
     int loy = (int)add_add(lo.y, sampleSize - 1, biasY) & -sampleSize;
     int hix = (hi.x + biasX) & -sampleSize;
@@ -137,8 +137,8 @@ __device__ __inline__ void setupTriangle(
     }
 
     int2 wv0;
-    wv0.x = p0.x + (p.widthPixels  << (CR_SUBPIXEL_LOG2 - 1));
-    wv0.y = p0.y + (p.heightPixels << (CR_SUBPIXEL_LOG2 - 1));
+    wv0.x = p0.x + (p.widthPixelsVp  << (CR_SUBPIXEL_LOG2 - 1));
+    wv0.y = p0.y + (p.heightPixelsVp << (CR_SUBPIXEL_LOG2 - 1));
 
     // Setup depth plane equation.
 

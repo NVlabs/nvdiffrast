@@ -183,6 +183,16 @@ static __device__ __forceinline__ uint4 make_uint4(const uint2& a, const uint2& 
 template<class T> static __device__ __forceinline__ void swap(T& a, T& b)                  { T temp = a; a = b; b = temp; }
 
 //------------------------------------------------------------------------
+// Triangle ID <-> float32 conversion functions to support very large triangle IDs.
+//
+// Values up to and including 16777216 (also, negative values) are converted trivially and retain
+// compatibility with previous versions. Larger values are mapped to unique float32 that are not equal to
+// the ID. The largest value that converts to float32 and back without generating inf or nan is 889192447.
+
+static __device__ __forceinline__ int   float_to_triidx(float x) { if (x <= 16777216.f) return (int)x;   return __float_as_int(x) - 0x4a800000; }
+static __device__ __forceinline__ float triidx_to_float(int x)   { if (x <= 0x01000000) return (float)x; return __int_as_float(0x4a800000 + x); }
+
+//------------------------------------------------------------------------
 // Coalesced atomics. These are all done via macros.
 
 #if __CUDA_ARCH__ >= 700 // Warp match instruction __match_any_sync() is only available on compute capability 7.x and higher

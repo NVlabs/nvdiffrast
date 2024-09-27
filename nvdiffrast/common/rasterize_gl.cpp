@@ -213,7 +213,10 @@ void rasterizeInitGLContext(NVDR_CTX_ARGS, RasterizeGLState& s, int cudaDeviceId
                 )
                 void main()
                 {
-                    out_raster = vec4(var_uvzw.x, var_uvzw.y, var_uvzw.z / var_uvzw.w, float(gl_PrimitiveID + 1));
+                    int id_int = gl_PrimitiveID + 1;
+                    float id_float = (id_int <= 0x01000000) ? float(id_int) : intBitsToFloat(0x4a800000 + id_int);
+
+                    out_raster = vec4(var_uvzw.x, var_uvzw.y, var_uvzw.z / var_uvzw.w, id_float);
                     out_db = var_db * var_uvzw.w;
                     IF_ZMODIFY(gl_FragDepth = gl_FragCoord.z + in_dummy;)
                 }
@@ -234,11 +237,14 @@ void rasterizeInitGLContext(NVDR_CTX_ARGS, RasterizeGLState& s, int cudaDeviceId
                 )
                 void main()
                 {
+                    int id_int = gl_PrimitiveID + 1;
+                    float id_float = (id_int <= 0x01000000) ? float(id_int) : intBitsToFloat(0x4a800000 + id_int);
+
                     vec4 prev = texelFetch(out_prev, ivec3(gl_FragCoord.x, gl_FragCoord.y, gl_Layer), 0);
                     float depth_new = var_uvzw.z / var_uvzw.w;
                     if (prev.w == 0 || depth_new <= prev.z)
                         discard;
-                    out_raster = vec4(var_uvzw.x, var_uvzw.y, depth_new, float(gl_PrimitiveID + 1));
+                    out_raster = vec4(var_uvzw.x, var_uvzw.y, depth_new, id_float);
                     out_db = var_db * var_uvzw.w;
                     IF_ZMODIFY(gl_FragDepth = gl_FragCoord.z + in_dummy;)
                 }
@@ -279,7 +285,10 @@ void rasterizeInitGLContext(NVDR_CTX_ARGS, RasterizeGLState& s, int cudaDeviceId
                 )
                 void main()
                 {
-                    out_raster = vec4(var_uvzw.x, var_uvzw.y, var_uvzw.z / var_uvzw.w, float(gl_PrimitiveID + 1));
+                    int id_int = gl_PrimitiveID + 1;
+                    float id_float = (id_int <= 0x01000000) ? float(id_int) : intBitsToFloat(0x4a800000 + id_int);
+
+                    out_raster = vec4(var_uvzw.x, var_uvzw.y, var_uvzw.z / var_uvzw.w, id_float);
                     IF_ZMODIFY(gl_FragDepth = gl_FragCoord.z + in_dummy;)
                 }
             )
@@ -297,11 +306,14 @@ void rasterizeInitGLContext(NVDR_CTX_ARGS, RasterizeGLState& s, int cudaDeviceId
                 )
                 void main()
                 {
+                    int id_int = gl_PrimitiveID + 1;
+                    float id_float = (id_int <= 0x01000000) ? float(id_int) : intBitsToFloat(0x4a800000 + id_int);
+
                     vec4 prev = texelFetch(out_prev, ivec3(gl_FragCoord.x, gl_FragCoord.y, gl_Layer), 0);
                     float depth_new = var_uvzw.z / var_uvzw.w;
                     if (prev.w == 0 || depth_new <= prev.z)
                         discard;
-                    out_raster = vec4(var_uvzw.x, var_uvzw.y, var_uvzw.z / var_uvzw.w, float(gl_PrimitiveID + 1));
+                    out_raster = vec4(var_uvzw.x, var_uvzw.y, var_uvzw.z / var_uvzw.w, id_float);
                     IF_ZMODIFY(gl_FragDepth = gl_FragCoord.z + in_dummy;)
                 }
             )

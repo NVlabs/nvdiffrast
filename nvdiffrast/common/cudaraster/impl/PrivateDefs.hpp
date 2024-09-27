@@ -75,18 +75,20 @@ struct CRParams
 {
     // Common.
 
-    CRAtomics*              atomics;            // Work counters. Per-image.
-    S32                     numImages;          // Batch size.
-    S32                     totalCount;         // In range mode, total number of triangles to render.
-    S32                     instanceMode;       // 0 = range mode, 1 = instance mode.
+    CRAtomics*  atomics;            // Work counters. Per-image.
+    S32         numImages;          // Batch size.
+    S32         totalCount;         // In range mode, total number of triangles to render.
+    S32         instanceMode;       // 0 = range mode, 1 = instance mode.
 
     S32         numVertices;        // Number of vertices in input buffer, not counting multiples in instance mode.
     S32         numTriangles;       // Number of triangles in input buffer.
     void*       vertexBuffer;       // numVertices * float4(x, y, z, w)
     void*       indexBuffer;        // numTriangles * int3(vi0, vi1, vi2)
 
-    S32         widthPixels;        // Viewport size in pixels. Must be multiple of tile size (8x8).
+    S32         widthPixels;        // Buffer size in pixels. Must be multiple of tile size (8x8).
     S32         heightPixels;
+    S32         widthPixelsVp;      // Viewport size in pixels.
+    S32         heightPixelsVp;
     S32         widthBins;          // widthPixels / CR_BIN_SIZE
     S32         heightBins;         // heightPixels / CR_BIN_SIZE
     S32         numBins;            // widthBins * heightBins
