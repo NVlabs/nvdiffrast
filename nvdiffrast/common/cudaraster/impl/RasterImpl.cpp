@@ -37,8 +37,11 @@ RasterImpl::RasterImpl(void)
     m_bufferSizesReported   (0),
 
     m_numImages             (0),
+    m_bufferSizePixels      (0, 0),
+    m_bufferSizeVp          (0, 0),
     m_sizePixels            (0, 0),
     m_sizeVp                (0, 0),
+    m_offsetPixels          (0, 0),
     m_sizeBins              (0, 0),
     m_numBins               (0),
     m_sizeTiles             (0, 0),
@@ -81,14 +84,33 @@ RasterImpl::~RasterImpl(void)
 
 //------------------------------------------------------------------------
 
-void RasterImpl::setViewportSize(Vec3i size)
+void RasterImpl::setBufferSize(Vec3i size)
 {
-    // Internally round buffer sizes to multiples of 8.
+    // Internal buffer width and height must be divisible by tile size.
     int w = (size.x + CR_TILE_SIZE - 1) & (-CR_TILE_SIZE);
     int h = (size.y + CR_TILE_SIZE - 1) & (-CR_TILE_SIZE);
 
-    m_numImages     = size.z;
+    m_bufferSizePixels = Vec2i(w, h);
+    m_bufferSizeVp     = Vec2i(size.x, size.y);
+    m_numImages        = size.z;
+
+    m_colorBuffer.reset(w * h * size.z * sizeof(U32));
+    m_depthBuffer.reset(w * h * size.z * sizeof(U32));
+}
+
+//------------------------------------------------------------------------
+
+void RasterImpl::setViewport(Vec2i size, Vec2i offset)
+{
+    // Offset must be divisible by tile size.
+    NVDR_CHECK((offset.x & (CR_TILE_SIZE - 1)) == 0 && (offset.y & (CR_TILE_SIZE - 1)) == 0, "invalid viewport offset");
+
+    // Round internal viewport size to multiples of tile size.
+    int w = (size.x + CR_TILE_SIZE - 1) & (-CR_TILE_SIZE);
+    int h = (size.y + CR_TILE_SIZE - 1) & (-CR_TILE_SIZE);
+
     m_sizePixels    = Vec2i(w, h);
+    m_offsetPixels  = offset;
     m_sizeVp        = Vec2i(size.x, size.y);
     m_sizeTiles.x   = m_sizePixels.x >> CR_TILE_LOG2;
     m_sizeTiles.y   = m_sizePixels.y >> CR_TILE_LOG2;
@@ -96,9 +118,6 @@ void RasterImpl::setViewportSize(Vec3i size)
     m_sizeBins.x    = (m_sizeTiles.x + CR_BIN_SIZE - 1) >> CR_BIN_LOG2;
     m_sizeBins.y    = (m_sizeTiles.y + CR_BIN_SIZE - 1) >> CR_BIN_LOG2;
     m_numBins       = m_sizeBins.x * m_sizeBins.y;
-
-    m_colorBuffer.reset(m_sizePixels.x * m_sizePixels.y * m_numImages * sizeof(U32));
-    m_depthBuffer.reset(m_sizePixels.x * m_sizePixels.y * m_numImages * sizeof(U32));
 }
 
 void RasterImpl::swapDepthAndPeel(void)
@@ -273,6 +292,11 @@ void RasterImpl::launchStages(bool instanceMode, bool peel, cudaStream_t stream)
         p.heightBins        = m_sizeBins.y;
         p.numBins           = m_numBins;
 
+        p.xs                = (float)m_bufferSizeVp.x / (float)m_sizeVp.x;
+        p.ys                = (float)m_bufferSizeVp.y / (float)m_sizeVp.y;
+        p.xo                = (float)(m_bufferSizeVp.x - m_sizeVp.x - 2 * m_offsetPixels.x) / (float)m_sizeVp.x;
+        p.yo                = (float)(m_bufferSizeVp.y - m_sizeVp.y - 2 * m_offsetPixels.y) / (float)m_sizeVp.y;
+
         p.widthTiles        = m_sizeTiles.x;
         p.heightTiles       = m_sizeTiles.y;
         p.numTiles          = m_numTiles;
@@ -300,9 +324,12 @@ void RasterImpl::launchStages(bool instanceMode, bool peel, cudaStream_t stream)
         p.activeTiles       = m_activeTiles.getPtr();
         p.tileFirstSeg      = m_tileFirstSeg.getPtr();
 
-        p.colorBuffer       = m_colorBuffer.getPtr();
-        p.depthBuffer       = m_depthBuffer.getPtr();
-        p.peelBuffer        = (m_renderModeFlags & CudaRaster::RenderModeFlag_EnableDepthPeeling) ? m_peelBuffer.getPtr() : 0;
+        size_t byteOffset = ((size_t)m_offsetPixels.x + (size_t)m_offsetPixels.y * (size_t)p.strideX) * sizeof(U32);
+        p.colorBuffer       = m_colorBuffer.getPtr(byteOffset);
+        p.depthBuffer       = m_depthBuffer.getPtr(byteOffset);
+        p.peelBuffer        = (m_renderModeFlags & CudaRaster::RenderModeFlag_EnableDepthPeeling) ? m_peelBuffer.getPtr(byteOffset) : 0;
+        p.strideX           = m_bufferSizePixels.x;
+        p.strideY           = m_bufferSizePixels.y;
 
         memcpy(&p.imageParamsFirst, imageParams, min(m_numImages, CR_EMBED_IMAGE_PARAMS) * sizeof(CRImageParams));
         p.imageParamsExtra  = (CRImageParams*)m_crImageParamsExtra.getPtr();
@@ -315,7 +342,7 @@ void RasterImpl::launchStages(bool instanceMode, bool peel, cudaStream_t stream)
     dim3 frBlock(32, m_numFineWarpsPerBlock);
     void* args[] = {&p};
 
-    // Launch stages from setup to coarse and copy atomics to host only if this is not a peeling iteration.
+    // Launch stages from setup to coarse and copy atomics to host only if this is not a single-tile peeling iteration.
     if (!peel)
     {
         if (instanceMode)

@@ -241,20 +241,20 @@ __device__ __inline__ void fineRasterImpl(const CRParams p)
         }
         else // otherwise => read tile from framebuffer
         {
-            U32* pColor = (U32*)p.colorBuffer + p.widthPixels * p.heightPixels * blockIdx.z;
-            U32* pDepth = (U32*)p.depthBuffer + p.widthPixels * p.heightPixels * blockIdx.z;
-			tileColor[threadIdx.x] = pColor[px + p.widthPixels * py];
-            tileDepth[threadIdx.x] = pDepth[px + p.widthPixels * py];
-            tileColor[threadIdx.x + 32] = pColor[px + p.widthPixels * (py + 4)];
-            tileDepth[threadIdx.x + 32] = pDepth[px + p.widthPixels * (py + 4)];
+            U32* pColor = (U32*)p.colorBuffer + p.strideX * p.strideY * blockIdx.z;
+            U32* pDepth = (U32*)p.depthBuffer + p.strideX * p.strideY * blockIdx.z;
+			tileColor[threadIdx.x] = pColor[px + p.strideX * py];
+            tileDepth[threadIdx.x] = pDepth[px + p.strideX * py];
+            tileColor[threadIdx.x + 32] = pColor[px + p.strideX * (py + 4)];
+            tileDepth[threadIdx.x + 32] = pDepth[px + p.strideX * (py + 4)];
         }
 
         // read peeling inputs if enabled
         if (p.renderModeFlags & CudaRaster::RenderModeFlag_EnableDepthPeeling)
         {
-            U32* pPeel = (U32*)p.peelBuffer + p.widthPixels * p.heightPixels * blockIdx.z;
-            tilePeel[threadIdx.x] = pPeel[px + p.widthPixels * py];
-            tilePeel[threadIdx.x + 32] = pPeel[px + p.widthPixels * (py + 4)];
+            U32* pPeel = (U32*)p.peelBuffer + p.strideX * p.strideY * blockIdx.z;
+            tilePeel[threadIdx.x] = pPeel[px + p.strideX * py];
+            tilePeel[threadIdx.x + 32] = pPeel[px + p.strideX * (py + 4)];
         }
 
         U32 tileZMax;
@@ -372,12 +372,12 @@ __device__ __inline__ void fineRasterImpl(const CRParams p)
         {
             int px = (tileX << CR_TILE_LOG2) + (threadIdx.x & (CR_TILE_SIZE - 1));
             int py = (tileY << CR_TILE_LOG2) + (threadIdx.x >> CR_TILE_LOG2);
-            U32* pColor = (U32*)p.colorBuffer + p.widthPixels * p.heightPixels * blockIdx.z;
-            U32* pDepth = (U32*)p.depthBuffer + p.widthPixels * p.heightPixels * blockIdx.z;
-            pColor[px + p.widthPixels * py] = tileColor[threadIdx.x];
-            pDepth[px + p.widthPixels * py] = tileDepth[threadIdx.x];
-            pColor[px + p.widthPixels * (py + 4)] = tileColor[threadIdx.x + 32];
-            pDepth[px + p.widthPixels * (py + 4)] = tileDepth[threadIdx.x + 32];
+            U32* pColor = (U32*)p.colorBuffer + p.strideX * p.strideY * blockIdx.z;
+            U32* pDepth = (U32*)p.depthBuffer + p.strideX * p.strideY * blockIdx.z;
+            pColor[px + p.strideX * py] = tileColor[threadIdx.x];
+            pDepth[px + p.strideX * py] = tileDepth[threadIdx.x];
+            pColor[px + p.strideX * (py + 4)] = tileColor[threadIdx.x + 32];
+            pDepth[px + p.strideX * (py + 4)] = tileDepth[threadIdx.x + 32];
         }
     }
 }

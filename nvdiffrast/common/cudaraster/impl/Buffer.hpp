@@ -21,7 +21,7 @@ public:
 
     void            reset       (size_t bytes);
     void            grow        (size_t bytes);
-    void*           getPtr      (void) { return m_gpuPtr; }
+    void*           getPtr      (size_t offset = 0) { return (void*)(((uintptr_t)m_gpuPtr) + offset); }
     size_t          getSize     (void) const { return m_bytes; }
 
     void            setPtr      (void* ptr) { m_gpuPtr = ptr; }

@@ -26,9 +26,14 @@ CudaRaster::~CudaRaster()
     delete m_impl;
 }
 
-void CudaRaster::setViewportSize(int width, int height, int numImages)
+void CudaRaster::setBufferSize(int width, int height, int numImages)
 {
-    m_impl->setViewportSize(Vec3i(width, height, numImages));
+    m_impl->setBufferSize(Vec3i(width, height, numImages));
+}
+
+void CudaRaster::setViewport(int width, int height, int offsetX, int offsetY)
+{
+    m_impl->setViewport(Vec2i(width, height), Vec2i(offsetX, offsetY));
 }
 
 void CudaRaster::setRenderModeFlags(U32 flags)

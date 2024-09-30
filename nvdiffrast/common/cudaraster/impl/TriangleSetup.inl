@@ -257,6 +257,15 @@ __device__ __inline__ void triangleSetupImpl(const CRParams p)
     float4 v1 = vertexBuffer[vidx.y];
     float4 v2 = vertexBuffer[vidx.z];
 
+    // Adjust vertex positions according to current viewport size and offset.
+
+    v0.x = v0.x * p.xs + v0.w * p.xo;
+    v0.y = v0.y * p.ys + v0.w * p.yo;
+    v1.x = v1.x * p.xs + v1.w * p.xo;
+    v1.y = v1.y * p.ys + v1.w * p.yo;
+    v2.x = v2.x * p.xs + v2.w * p.xo;
+    v2.y = v2.y * p.ys + v2.w * p.yo;
+
     // Outside view frustum => cull.
 
     if (v0.w < fabsf(v0.x) | v0.w < fabsf(v0.y) | v0.w < fabsf(v0.z))

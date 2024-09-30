@@ -21,7 +21,8 @@ public:
 					        RasterImpl				(void);
 					        ~RasterImpl				(void);
 
-    void                    setViewportSize         (Vec3i size);
+    void                    setBufferSize           (Vec3i size);
+    void                    setViewport             (Vec2i size, Vec2i offset);
     void                    setRenderModeFlags      (U32 flags) { m_renderModeFlags = flags; }
     void                    deferredClear           (U32 color) { m_deferredClear = true; m_clearColor = color; }
     void                    setVertexBuffer         (void* ptr, int numVertices) { m_vertexPtr = ptr; m_numVertices = numVertices; } // GPU pointer.
@@ -52,8 +53,11 @@ private:
     Buffer                  m_depthBuffer;
     Buffer                  m_peelBuffer;
     int                     m_numImages;
+    Vec2i                   m_bufferSizePixels;     // Internal buffer size.
+    Vec2i                   m_bufferSizeVp;         // Total viewport size.
     Vec2i                   m_sizePixels;           // Internal size at which all computation is done, buffers reserved, etc.
     Vec2i                   m_sizeVp;               // Size to which output will be cropped outside, determines viewport size.
+    Vec2i                   m_offsetPixels;         // Viewport offset for tiled rendering.
     Vec2i                   m_sizeBins;
     S32                     m_numBins;
     Vec2i                   m_sizeTiles;

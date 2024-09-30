@@ -39,7 +39,8 @@ public:
 					        CudaRaster				(void);
 					        ~CudaRaster				(void);
 
-    void                    setViewportSize         (int width, int height, int numImages);              // Width and height are internally rounded up to multiples of tile size (8x8) for buffer sizes.
+    void                    setBufferSize           (int width, int height, int numImages);              // Width and height are internally rounded up to multiples of tile size (8x8) for buffer sizes.
+    void                    setViewport             (int width, int height, int offsetX, int offsetY);   // Tiled rendering viewport setup.
     void                    setRenderModeFlags      (unsigned int renderModeFlags);                      // Affects all subsequent calls to drawTriangles(). Defaults to zero.
     void                    deferredClear           (unsigned int clearColor);                           // Clears color and depth buffers during next call to drawTriangles().
     void                    setVertexBuffer         (void* vertices, int numVertices);                   // GPU pointer managed by caller. Vertex positions in clip space as float4 (x, y, z, w).

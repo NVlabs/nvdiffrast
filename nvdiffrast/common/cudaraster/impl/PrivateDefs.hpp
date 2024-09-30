@@ -85,13 +85,18 @@ struct CRParams
     void*       vertexBuffer;       // numVertices * float4(x, y, z, w)
     void*       indexBuffer;        // numTriangles * int3(vi0, vi1, vi2)
 
-    S32         widthPixels;        // Buffer size in pixels. Must be multiple of tile size (8x8).
+    S32         widthPixels;        // Render buffer size in pixels. Must be multiple of tile size (8x8).
     S32         heightPixels;
     S32         widthPixelsVp;      // Viewport size in pixels.
     S32         heightPixelsVp;
     S32         widthBins;          // widthPixels / CR_BIN_SIZE
     S32         heightBins;         // heightPixels / CR_BIN_SIZE
     S32         numBins;            // widthBins * heightBins
+
+    F32         xs;                 // Vertex position adjustments for tiled rendering.
+    F32         ys;
+    F32         xo;
+    F32         yo;
 
     S32         widthTiles;         // widthPixels / CR_TILE_SIZE
     S32         heightTiles;        // heightPixels / CR_TILE_SIZE
@@ -130,11 +135,13 @@ struct CRParams
     void*       activeTiles;        // CR_MAXTILES_SQR * (S32 tileIdx)
     void*       tileFirstSeg;       // CR_MAXTILES_SQR * (S32 segIdx), -1 = none
 
-    // Surface buffers.
+    // Surface buffers. Outer tile offset is baked into pointers.
 
     void*       colorBuffer;        // sizePixels.x * sizePixels.y * numImages * U32
     void*       depthBuffer;        // sizePixels.x * sizePixels.y * numImages * U32
     void*       peelBuffer;         // sizePixels.x * sizePixels.y * numImages * U32, only if peeling enabled.
+    S32         strideX;            // horizontal size in pixels
+    S32         strideY;            // vertical stride in pixels
 
     // Per-image parameters for first images are embedded here to avoid extra memcpy for small batches.
 
