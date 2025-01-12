@@ -28,12 +28,12 @@ OP_RETURN_TT        interpolate_fwd_da                  (torch::Tensor attr, tor
 OP_RETURN_TT        interpolate_grad                    (torch::Tensor attr, torch::Tensor rast, torch::Tensor tri, torch::Tensor dy);
 OP_RETURN_TTT       interpolate_grad_da                 (torch::Tensor attr, torch::Tensor rast, torch::Tensor tri, torch::Tensor dy, torch::Tensor rast_db, torch::Tensor dda, bool diff_attrs_all, std::vector<int>& diff_attrs_vec);
 TextureMipWrapper   texture_construct_mip               (torch::Tensor tex, int max_mip_level, bool cube_mode);
-OP_RETURN_T         texture_fwd                         (torch::Tensor tex, torch::Tensor uv, int filter_mode, int boundary_mode);
-OP_RETURN_T         texture_fwd_mip                     (torch::Tensor tex, torch::Tensor uv, torch::Tensor uv_da, torch::Tensor mip_level_bias, TextureMipWrapper mip_wrapper, std::vector<torch::Tensor> mip_stack, int filter_mode, int boundary_mode);
-OP_RETURN_T         texture_grad_nearest                (torch::Tensor tex, torch::Tensor uv, torch::Tensor dy, int filter_mode, int boundary_mode);
-OP_RETURN_TT        texture_grad_linear                 (torch::Tensor tex, torch::Tensor uv, torch::Tensor dy, int filter_mode, int boundary_mode);
-OP_RETURN_TTV       texture_grad_linear_mipmap_nearest  (torch::Tensor tex, torch::Tensor uv, torch::Tensor dy, torch::Tensor uv_da, torch::Tensor mip_level_bias, TextureMipWrapper mip_wrapper, std::vector<torch::Tensor> mip_stack, int filter_mode, int boundary_mode);
-OP_RETURN_TTTTV     texture_grad_linear_mipmap_linear   (torch::Tensor tex, torch::Tensor uv, torch::Tensor dy, torch::Tensor uv_da, torch::Tensor mip_level_bias, TextureMipWrapper mip_wrapper, std::vector<torch::Tensor> mip_stack, int filter_mode, int boundary_mode);
+OP_RETURN_T         texture_fwd                         (torch::Tensor tex, torch::Tensor uv, int filter_mode, int boundary_mode, std::vector<float> border_values);
+OP_RETURN_T         texture_fwd_mip                     (torch::Tensor tex, torch::Tensor uv, torch::Tensor uv_da, torch::Tensor mip_level_bias, TextureMipWrapper mip_wrapper, std::vector<torch::Tensor> mip_stack, int filter_mode, int boundary_mode, std::vector<float> border_values);
+OP_RETURN_T         texture_grad_nearest                (torch::Tensor tex, torch::Tensor uv, torch::Tensor dy, int filter_mode, int boundary_mode, std::vector<float> border_values);
+OP_RETURN_TT        texture_grad_linear                 (torch::Tensor tex, torch::Tensor uv, torch::Tensor dy, int filter_mode, int boundary_mode, std::vector<float> border_values);
+OP_RETURN_TTV       texture_grad_linear_mipmap_nearest  (torch::Tensor tex, torch::Tensor uv, torch::Tensor dy, torch::Tensor uv_da, torch::Tensor mip_level_bias, TextureMipWrapper mip_wrapper, std::vector<torch::Tensor> mip_stack, int filter_mode, int boundary_mode, std::vector<float> border_values);
+OP_RETURN_TTTTV     texture_grad_linear_mipmap_linear   (torch::Tensor tex, torch::Tensor uv, torch::Tensor dy, torch::Tensor uv_da, torch::Tensor mip_level_bias, TextureMipWrapper mip_wrapper, std::vector<torch::Tensor> mip_stack, int filter_mode, int boundary_mode, std::vector<float> border_values);
 TopologyHashWrapper antialias_construct_topology_hash   (torch::Tensor tri);
 OP_RETURN_TT        antialias_fwd                       (torch::Tensor color, torch::Tensor rast, torch::Tensor pos, torch::Tensor tri, TopologyHashWrapper topology_hash);
 OP_RETURN_TT        antialias_grad                      (torch::Tensor color, torch::Tensor rast, torch::Tensor pos, torch::Tensor tri, torch::Tensor dy, torch::Tensor work_buffer);

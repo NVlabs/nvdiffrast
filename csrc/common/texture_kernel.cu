@@ -352,8 +352,8 @@ static __device__ __forceinline__ int indexTextureNearest(const TextureKernelPar
     int iu = __float2int_rd(u);
     int iv = __float2int_rd(v);
 
-    // In zero boundary mode, return texture address -1.
-    if (!CUBE_MODE && p.boundaryMode == TEX_BOUNDARY_MODE_ZERO)
+    // In zero/values boundary mode, return texture address -1.
+    if (!CUBE_MODE && (p.boundaryMode == TEX_BOUNDARY_MODE_ZERO || p.boundaryMode == TEX_BOUNDARY_MODE_VALUES))
     {
         if (iu < 0 || iu >= w || iv < 0 || iv >= h)
             return -1;
@@ -454,8 +454,8 @@ static __device__ __forceinline__ float2 indexTextureLinear(const TextureKernelP
     tcOut.z = iu0z + w * iv1;
     tcOut.w = iu1z + w * iv1;
 
-    // Invalidate texture addresses outside unit square if we are in zero mode.
-    if (!CUBE_MODE && p.boundaryMode == TEX_BOUNDARY_MODE_ZERO)
+    // Invalidate texture addresses outside unit square if we are in zero/values mode.
+    if (!CUBE_MODE && (p.boundaryMode == TEX_BOUNDARY_MODE_ZERO || p.boundaryMode == TEX_BOUNDARY_MODE_VALUES))
     {
         bool iu0_out = (iu0 < 0 || iu0 >= w);
         bool iu1_out = (iu1 < 0 || iu1 >= w);
@@ -588,12 +588,12 @@ static __device__ __forceinline__ void calculateMipLevel(int& level0, int& level
 // Texel fetch and accumulator helpers that understand cube map corners.
 
 template<class T>
-static __device__ __forceinline__ void fetchQuad(T& a00, T& a10, T& a01, T& a11, const float* pIn, int4 tc, bool corner)
+static __device__ __forceinline__ void fetchQuad(T& a00, T& a10, T& a01, T& a11, const float* pIn, int4 tc, bool corner, const T borderValue)
 {
-    // For invalid cube map uv, tc will be all negative, and all texel values will be zero.
+    // For invalid cube map uv, tc will be all negative, and all texel values will be zero (borderValue will be zero for boundary mode TEX_BOUNDARY_MODE_CUBE).
     if (corner)
     {
-        T avg = zero_value<T>();
+        T avg = borderValue;
         if (tc.x >= 0) avg += (a00 = *((const T*)&pIn[tc.x]));
         if (tc.y >= 0) avg += (a10 = *((const T*)&pIn[tc.y]));
         if (tc.z >= 0) avg += (a01 = *((const T*)&pIn[tc.z]));
@@ -606,10 +606,10 @@ static __device__ __forceinline__ void fetchQuad(T& a00, T& a10, T& a01, T& a11,
     }
     else
     {
-        a00 = (tc.x >= 0) ? *((const T*)&pIn[tc.x]) : zero_value<T>();
-        a10 = (tc.y >= 0) ? *((const T*)&pIn[tc.y]) : zero_value<T>();
-        a01 = (tc.z >= 0) ? *((const T*)&pIn[tc.z]) : zero_value<T>();
-        a11 = (tc.w >= 0) ? *((const T*)&pIn[tc.w]) : zero_value<T>();
+        a00 = (tc.x >= 0) ? *((const T*)&pIn[tc.x]) : borderValue;
+        a10 = (tc.y >= 0) ? *((const T*)&pIn[tc.y]) : borderValue;
+        a01 = (tc.z >= 0) ? *((const T*)&pIn[tc.z]) : borderValue;
+        a11 = (tc.w >= 0) ? *((const T*)&pIn[tc.w]) : borderValue;
     }
 }
 
@@ -706,6 +706,23 @@ __global__ void MipBuildKernel4(const TextureKernelParams p) { MipBuildKernelTem
 //------------------------------------------------------------------------
 // Forward kernel.
 
+template<class T>
+__device__ __forceinline__ T border_value(const TextureKernelParams& p, const int c);
+
+template<> __device__ __forceinline__ float  border_value<float> (const TextureKernelParams& p, const int c) 
+{ 
+    return p.boundaryMode == TEX_BOUNDARY_MODE_VALUES ? p.borderValues[c] : zero_value<float>(); 
+}
+template<> __device__ __forceinline__ float2 border_value<float2>(const TextureKernelParams& p, const int c) 
+{ 
+    return p.boundaryMode == TEX_BOUNDARY_MODE_VALUES ? make_float2(p.borderValues[c], p.borderValues[c+1]) : zero_value<float2>(); 
+}
+template<> __device__ __forceinline__ float4 border_value<float4>(const TextureKernelParams& p, const int c) 
+{ 
+    return p.boundaryMode == TEX_BOUNDARY_MODE_VALUES ? make_float4(p.borderValues[c], p.borderValues[c+1], p.borderValues[c+2], p.borderValues[c+3]) : zero_value<float4>(); 
+}
+
+
 template <class T, int C, bool CUBE_MODE, bool BIAS_ONLY, int FILTER_MODE>
 static __forceinline__ __device__ void TextureFwdKernelTemplate(const TextureKernelParams p)
 {
@@ -737,9 +754,9 @@ static __forceinline__ __device__ void TextureFwdKernelTemplate(const TextureKer
         tc *= p.channels;
         const float* pIn = p.tex[0];
 
-        // Copy if valid tc, otherwise output zero.
+        // Copy if valid tc, otherwise output the border value.
         for (int i=0; i < p.channels; i += C)
-            *((T*)&pOut[i]) = (tc >= 0) ? *((const T*)&pIn[tc + i]) : zero_value<T>();
+            *((T*)&pOut[i]) = (tc >= 0) ? *((const T*)&pIn[tc + i]) : border_value<T>(p, i);
 
         return; // Exit.
     }
@@ -764,7 +781,7 @@ static __forceinline__ __device__ void TextureFwdKernelTemplate(const TextureKer
         for (int i=0; i < p.channels; i += C, tc0 += C)
         {
             T a00, a10, a01, a11;
-            fetchQuad<T>(a00, a10, a01, a11, pIn0, tc0, corner0);
+            fetchQuad<T>(a00, a10, a01, a11, pIn0, tc0, corner0, border_value<T>(p, i));
             *((T*)&pOut[i]) = bilerp(a00, a10, a01, a11, uv0);
         }
         return; // Exit.
@@ -782,14 +799,14 @@ static __forceinline__ __device__ void TextureFwdKernelTemplate(const TextureKer
     {
         // First level.
         T a00, a10, a01, a11;
-        fetchQuad<T>(a00, a10, a01, a11, pIn0, tc0, corner0);
+        fetchQuad<T>(a00, a10, a01, a11, pIn0, tc0, corner0, border_value<T>(p, i));
         T a = bilerp(a00, a10, a01, a11, uv0);
 
         // Second level unless in magnification mode.
         if (flevel > 0.f)
         {
             T b00, b10, b01, b11;
-            fetchQuad<T>(b00, b10, b01, b11, pIn1, tc1, corner1);
+            fetchQuad<T>(b00, b10, b01, b11, pIn1, tc1, corner1, border_value<T>(p, i));
             T b = bilerp(b00, b10, b01, b11, uv1);
             a = lerp(a, b, flevel); // Interpolate between levels.
         }
@@ -1035,7 +1052,7 @@ static __forceinline__ __device__ void TextureGradKernelTemplate(const TextureKe
             accumQuad(tw0 * dy, pOut0, level0, tc0, corner0, CA_TEMP);
 
             float a00, a10, a01, a11;
-            fetchQuad<float>(a00, a10, a01, a11, pIn0, tc0, corner0);
+            fetchQuad<float>(a00, a10, a01, a11, pIn0, tc0, corner0, border_value<float>(p, i));
             float ad = (a11 + a00 - a10 - a01);
             gu += dy * ((a10 - a00) + uv0.y * ad) * sclu0;
             gv += dy * ((a01 - a00) + uv0.x * ad) * sclv0;
@@ -1082,7 +1099,7 @@ static __forceinline__ __device__ void TextureGradKernelTemplate(const TextureKe
 
         // UV gradients for first level.
         float a00, a10, a01, a11;
-        fetchQuad<float>(a00, a10, a01, a11, pIn0, tc0, corner0);
+        fetchQuad<float>(a00, a10, a01, a11, pIn0, tc0, corner0, border_value<float>(p, i));
         float ad = (a11 + a00 - a10 - a01);
         gu += dy0 * ((a10 - a00) + uv0.y * ad) * sclu0;
         gv += dy0 * ((a01 - a00) + uv0.x * ad) * sclv0;
@@ -1096,7 +1113,7 @@ static __forceinline__ __device__ void TextureGradKernelTemplate(const TextureKe
 
             // UV gradients for second level.
             float b00, b10, b01, b11;
-            fetchQuad<float>(b00, b10, b01, b11, pIn1, tc1, corner1);
+            fetchQuad<float>(b00, b10, b01, b11, pIn1, tc1, corner1, border_value<float>(p, i));
             float bd = (b11 + b00 - b10 - b01);
             gu += dy1 * ((b10 - b00) + uv1.y * bd) * sclu1;
             gv += dy1 * ((b01 - b00) + uv1.x * bd) * sclv1;

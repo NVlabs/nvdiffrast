@@ -31,37 +31,40 @@
 #define TEX_BOUNDARY_MODE_WRAP                  1   // Wrap (u, v).
 #define TEX_BOUNDARY_MODE_CLAMP                 2   // Clamp (u, v).
 #define TEX_BOUNDARY_MODE_ZERO                  3   // Pad with zeros.
-#define TEX_BOUNDARY_MODE_COUNT                 4
+#define TEX_BOUNDARY_MODE_VALUES                4   // Pad with user-defined values.
+#define TEX_BOUNDARY_MODE_COUNT                 5
+#define TEX_MAX_BORDER_VALUES                   16 // Maximum number of values for TEX_BOUNDARY_MODE_VALUES.
 
 //------------------------------------------------------------------------
 // CUDA kernel params.
 
 struct TextureKernelParams
 {
-    const float*    tex[TEX_MAX_MIP_LEVEL];         // Incoming texture buffer with mip levels.
-    const float*    uv;                             // Incoming texcoord buffer.
-    const float*    uvDA;                           // Incoming uv pixel diffs or NULL.
-    const float*    mipLevelBias;                   // Incoming mip level bias or NULL.
-    const float*    dy;                             // Incoming output gradient.
-    float*          out;                            // Outgoing texture data.
-    float*          gradTex[TEX_MAX_MIP_LEVEL];     // Outgoing texture gradients with mip levels.
-    float*          gradUV;                         // Outgoing texcoord gradient.
-    float*          gradUVDA;                       // Outgoing texcoord pixel differential gradient.
-    float*          gradMipLevelBias;               // Outgoing mip level bias gradient.
-    int             enableMip;                      // If true, we have uv_da and/or mip_level_bias input(s), and a mip tensor.
-    int             filterMode;                     // One of the TEX_MODE_ constants.
-    int             boundaryMode;                   // One of the TEX_BOUNDARY_MODE_ contants.
-    int             texConst;                       // If true, texture is known to be constant.
-    int             mipLevelLimit;                  // Mip level limit coming from the op.
-    int             channels;                       // Number of texture channels.
-    int             imgWidth;                       // Image width.
-    int             imgHeight;                      // Image height.
-    int             texWidth;                       // Texture width.
-    int             texHeight;                      // Texture height.
-    int             texDepth;                       // Texture depth.
-    int             n;                              // Minibatch size.
-    int             mipLevelMax;                    // Maximum mip level index. Zero if mips disabled.
-    int             mipLevelOut;                    // Mip level being calculated in builder kernel.
+    const float*    tex[TEX_MAX_MIP_LEVEL];              // Incoming texture buffer with mip levels.
+    const float*    uv;                                  // Incoming texcoord buffer.
+    const float*    uvDA;                                // Incoming uv pixel diffs or NULL.
+    const float*    mipLevelBias;                        // Incoming mip level bias or NULL.
+    const float*    dy;                                  // Incoming output gradient.
+    float*          out;                                 // Outgoing texture data.
+    float*          gradTex[TEX_MAX_MIP_LEVEL];          // Outgoing texture gradients with mip levels.
+    float*          gradUV;                              // Outgoing texcoord gradient.
+    float*          gradUVDA;                            // Outgoing texcoord pixel differential gradient.
+    float*          gradMipLevelBias;                    // Outgoing mip level bias gradient.
+    int             enableMip;                           // If true, we have uv_da and/or mip_level_bias input(s), and a mip tensor.
+    int             filterMode;                          // One of the TEX_MODE_ constants.
+    int             boundaryMode;                        // One of the TEX_BOUNDARY_MODE_ contants.
+    float           borderValues[TEX_MAX_BORDER_VALUES]; // Border values for TEX_BOUNDARY_MODE_VALUES (one per channel)
+    int             texConst;                            // If true, texture is known to be constant.
+    int             mipLevelLimit;                       // Mip level limit coming from the op.
+    int             channels;                            // Number of texture channels.
+    int             imgWidth;                            // Image width.
+    int             imgHeight;                           // Image height.
+    int             texWidth;                            // Texture width.
+    int             texHeight;                           // Texture height.
+    int             texDepth;                            // Texture depth.
+    int             n;                                   // Minibatch size.
+    int             mipLevelMax;                         // Maximum mip level index. Zero if mips disabled.
+    int             mipLevelOut;                         // Mip level being calculated in builder kernel.
 };
 
 //------------------------------------------------------------------------
