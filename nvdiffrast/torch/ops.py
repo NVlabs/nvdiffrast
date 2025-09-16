@@ -6,125 +6,9 @@
 # distribution of this software and related documentation without an express
 # license agreement from NVIDIA CORPORATION is strictly prohibited.
 
-import logging
 import numpy as np
-import os
 import torch
-import torch.utils.cpp_extension
-
-#----------------------------------------------------------------------------
-# C++/Cuda plugin compiler/loader.
-
-_cached_plugin = {}
-def _get_plugin(gl=False):
-    assert isinstance(gl, bool)
-
-    # Return cached plugin if already loaded.
-    if _cached_plugin.get(gl, None) is not None:
-        return _cached_plugin[gl]
-
-    # Make sure we can find the necessary compiler and libary binaries.
-    if os.name == 'nt':
-        lib_dir = os.path.dirname(__file__) + r"\..\lib"
-        def find_cl_path():
-            import glob
-            def get_sort_key(x):
-                # Primary criterion is VS version, secondary is edition, third is internal MSVC version.
-                x = x.split('\\')[3:]
-                x[1] = {'BuildTools': '~0', 'Community': '~1', 'Pro': '~2', 'Professional': '~3', 'Enterprise': '~4'}.get(x[1], x[1])
-                return x
-            vs_relative_path = r"\Microsoft Visual Studio\*\*\VC\Tools\MSVC\*\bin\Hostx64\x64"
-            paths = glob.glob(r"C:\Program Files" + vs_relative_path)
-            paths += glob.glob(r"C:\Program Files (x86)" + vs_relative_path)
-            if paths:
-                return sorted(paths, key=get_sort_key)[-1]
-
-        # If cl.exe is not on path, try to find it.
-        if os.system("where cl.exe >nul 2>nul") != 0:
-            cl_path = find_cl_path()
-            if cl_path is None:
-                raise RuntimeError("Could not locate a supported Microsoft Visual C++ installation")
-            os.environ['PATH'] += ';' + cl_path
-
-    # Compiler options.
-    common_opts = ['-DNVDR_TORCH']
-    cc_opts = []
-    if os.name == 'nt':
-        cc_opts += ['/wd4067', '/wd4624'] # Disable warnings in torch headers.
-
-    # Linker options for the GL-interfacing plugin.
-    ldflags = []
-    if gl:
-        if os.name == 'posix':
-            ldflags = ['-lGL', '-lEGL']
-        elif os.name == 'nt':
-            libs = ['gdi32', 'opengl32', 'user32', 'setgpu']
-            ldflags = ['/LIBPATH:' + lib_dir] + ['/DEFAULTLIB:' + x for x in libs]
-
-    # List of source files.
-    if gl:
-        source_files = [
-            '../common/common.cpp',
-            '../common/glutil.cpp',
-            '../common/rasterize_gl.cpp',
-            'torch_bindings_gl.cpp',
-            'torch_rasterize_gl.cpp',
-        ]
-    else:
-        source_files = [
-            '../common/cudaraster/impl/Buffer.cpp',
-            '../common/cudaraster/impl/CudaRaster.cpp',
-            '../common/cudaraster/impl/RasterImpl.cu',
-            '../common/cudaraster/impl/RasterImpl.cpp',
-            '../common/common.cpp',
-            '../common/rasterize.cu',
-            '../common/interpolate.cu',
-            '../common/texture.cu',
-            '../common/texture.cpp',
-            '../common/antialias.cu',
-            'torch_bindings.cpp',
-            'torch_rasterize.cpp',
-            'torch_interpolate.cpp',
-            'torch_texture.cpp',
-            'torch_antialias.cpp',
-        ]
-
-    # Some containers set this to contain old architectures that won't compile. We only need the one installed in the machine.
-    os.environ['TORCH_CUDA_ARCH_LIST'] = ''
-
-    # On Linux, show a warning if GLEW is being forcibly loaded when compiling the GL plugin.
-    if gl and (os.name == 'posix') and ('libGLEW' in os.environ.get('LD_PRELOAD', '')):
-        logging.getLogger('nvdiffrast').warning("Warning: libGLEW is being loaded via LD_PRELOAD, and will probably conflict with the OpenGL plugin")
-
-    # Try to detect if a stray lock file is left in cache directory and show a warning. This sometimes happens on Windows if the build is interrupted at just the right moment.
-    plugin_name = 'nvdiffrast_plugin' + ('_gl' if gl else '')
-    try:
-        lock_fn = os.path.join(torch.utils.cpp_extension._get_build_directory(plugin_name, False), 'lock')
-        if os.path.exists(lock_fn):
-            logging.getLogger('nvdiffrast').warning("Lock file exists in build directory: '%s'" % lock_fn)
-    except:
-        pass
-
-    # Speed up compilation on Windows.
-    if os.name == 'nt':
-        # Skip telemetry sending step in vcvarsall.bat
-        os.environ['VSCMD_SKIP_SENDTELEMETRY'] = '1'
-
-        # Opportunistically patch distutils to cache MSVC environments.
-        try:
-            import distutils._msvccompiler
-            import functools
-            if not hasattr(distutils._msvccompiler._get_vc_env, '__wrapped__'):
-                distutils._msvccompiler._get_vc_env = functools.lru_cache()(distutils._msvccompiler._get_vc_env)
-        except:
-            pass
-
-    # Compile and store in cache.
-    source_paths = [os.path.join(os.path.dirname(__file__), fn) for fn in source_files]
-    _cached_plugin[gl] = torch.utils.cpp_extension.load(name=plugin_name, sources=source_paths, extra_cflags=common_opts+cc_opts, extra_cuda_cflags=common_opts+['-lineinfo'], extra_ldflags=ldflags, with_cuda=True, verbose=False)
-
-    # Return the compiled module.
-    return _cached_plugin[gl]
+import _nvdiffrast_c
 
 #----------------------------------------------------------------------------
 # Log level.
@@ -136,7 +20,7 @@ def get_log_level():
     Returns:
       Current log level in nvdiffrast. See `set_log_level()` for possible values.
     '''
-    return _get_plugin().get_log_level()
+    return _nvdiffrast_c.get_log_level()
 
 def set_log_level(level):
     '''Set log level.
@@ -153,7 +37,7 @@ def set_log_level(level):
              severity or higher will be printed, while messages of lower
              severity will be silent.
     '''
-    _get_plugin().set_log_level(level)
+    _nvdiffrast_c.set_log_level(level)
 
 #----------------------------------------------------------------------------
 # CudaRaster state wrapper.
@@ -179,7 +63,7 @@ class RasterizeCudaContext:
         else:
             with torch.cuda.device(device):
                 cuda_device_idx = torch.cuda.current_device()
-        self.cpp_wrapper = _get_plugin().RasterizeCRStateWrapper(cuda_device_idx)
+        self.cpp_wrapper = _nvdiffrast_c.RasterizeCRStateWrapper(cuda_device_idx)
         self.output_db = True
         self.active_depth_peeler = None
 
@@ -250,7 +134,7 @@ class _rasterize_func(torch.autograd.Function):
         if isinstance(raster_ctx, RasterizeGLContext):
             out, out_db = _get_plugin(gl=True).rasterize_fwd_gl(raster_ctx.cpp_wrapper, pos, tri, resolution, ranges, peeling_idx)
         else:
-            out, out_db = _get_plugin().rasterize_fwd_cuda(raster_ctx.cpp_wrapper, pos, tri, resolution, ranges, peeling_idx)
+            out, out_db = _nvdiffrast_c.rasterize_fwd_cuda(raster_ctx.cpp_wrapper, pos, tri, resolution, ranges, peeling_idx)
         ctx.save_for_backward(pos, tri, out)
         ctx.saved_grad_db = grad_db
         return out, out_db
@@ -259,9 +143,9 @@ class _rasterize_func(torch.autograd.Function):
     def backward(ctx, dy, ddb):
         pos, tri, out = ctx.saved_tensors
         if ctx.saved_grad_db:
-            g_pos = _get_plugin().rasterize_grad_db(pos, tri, out, dy, ddb)
+            g_pos = _nvdiffrast_c.rasterize_grad_db(pos, tri, out, dy, ddb)
         else:
-            g_pos = _get_plugin().rasterize_grad(pos, tri, out, dy)
+            g_pos = _nvdiffrast_c.rasterize_grad(pos, tri, out, dy)
         return None, g_pos, None, None, None, None, None
 
 # Op wrapper.
@@ -392,7 +276,7 @@ class DepthPeeler:
 class _interpolate_func_da(torch.autograd.Function):
     @staticmethod
     def forward(ctx, attr, rast, tri, rast_db, diff_attrs_all, diff_attrs_list):
-        out, out_da = _get_plugin().interpolate_fwd_da(attr, rast, tri, rast_db, diff_attrs_all, diff_attrs_list)
+        out, out_da = _nvdiffrast_c.interpolate_fwd_da(attr, rast, tri, rast_db, diff_attrs_all, diff_attrs_list)
         ctx.save_for_backward(attr, rast, tri, rast_db)
         ctx.saved_misc = diff_attrs_all, diff_attrs_list
         return out, out_da
@@ -401,21 +285,21 @@ class _interpolate_func_da(torch.autograd.Function):
     def backward(ctx, dy, dda):
         attr, rast, tri, rast_db = ctx.saved_tensors
         diff_attrs_all, diff_attrs_list = ctx.saved_misc
-        g_attr, g_rast, g_rast_db = _get_plugin().interpolate_grad_da(attr, rast, tri, dy, rast_db, dda, diff_attrs_all, diff_attrs_list)
+        g_attr, g_rast, g_rast_db = _nvdiffrast_c.interpolate_grad_da(attr, rast, tri, dy, rast_db, dda, diff_attrs_all, diff_attrs_list)
         return g_attr, g_rast, None, g_rast_db, None, None
 
 # No pixel differential for any attribute.
 class _interpolate_func(torch.autograd.Function):
     @staticmethod
     def forward(ctx, attr, rast, tri):
-        out, out_da = _get_plugin().interpolate_fwd(attr, rast, tri)
+        out, out_da = _nvdiffrast_c.interpolate_fwd(attr, rast, tri)
         ctx.save_for_backward(attr, rast, tri)
         return out, out_da
 
     @staticmethod
     def backward(ctx, dy, _):
         attr, rast, tri = ctx.saved_tensors
-        g_attr, g_rast = _get_plugin().interpolate_grad(attr, rast, tri, dy)
+        g_attr, g_rast = _nvdiffrast_c.interpolate_grad(attr, rast, tri, dy)
         return g_attr, g_rast, None
 
 # Op wrapper.
@@ -485,8 +369,8 @@ class _texture_func_mip(torch.autograd.Function):
         if mip_level_bias is None:
             mip_level_bias = empty
         if mip_wrapper is None:
-            mip_wrapper = _get_plugin().TextureMipWrapper()
-        out = _get_plugin().texture_fwd_mip(tex, uv, uv_da, mip_level_bias, mip_wrapper, mip_stack, filter_mode_enum, boundary_mode_enum)
+            mip_wrapper = _nvdiffrast_c.TextureMipWrapper()
+        out = _nvdiffrast_c.texture_fwd_mip(tex, uv, uv_da, mip_level_bias, mip_wrapper, mip_stack, filter_mode_enum, boundary_mode_enum)
         ctx.save_for_backward(tex, uv, uv_da, mip_level_bias, *mip_stack)
         ctx.saved_misc = filter_mode, mip_wrapper, filter_mode_enum, boundary_mode_enum
         return out
@@ -496,17 +380,17 @@ class _texture_func_mip(torch.autograd.Function):
         tex, uv, uv_da, mip_level_bias, *mip_stack = ctx.saved_tensors
         filter_mode, mip_wrapper, filter_mode_enum, boundary_mode_enum = ctx.saved_misc
         if filter_mode == 'linear-mipmap-linear':
-            g_tex, g_uv, g_uv_da, g_mip_level_bias, g_mip_stack = _get_plugin().texture_grad_linear_mipmap_linear(tex, uv, dy, uv_da, mip_level_bias, mip_wrapper, mip_stack, filter_mode_enum, boundary_mode_enum)
+            g_tex, g_uv, g_uv_da, g_mip_level_bias, g_mip_stack = _nvdiffrast_c.texture_grad_linear_mipmap_linear(tex, uv, dy, uv_da, mip_level_bias, mip_wrapper, mip_stack, filter_mode_enum, boundary_mode_enum)
             return (None, g_tex, g_uv, g_uv_da, g_mip_level_bias, None, None, None) + tuple(g_mip_stack)
         else: # linear-mipmap-nearest
-            g_tex, g_uv, g_mip_stack = _get_plugin().texture_grad_linear_mipmap_nearest(tex, uv, dy, uv_da, mip_level_bias, mip_wrapper, mip_stack, filter_mode_enum, boundary_mode_enum)
+            g_tex, g_uv, g_mip_stack = _nvdiffrast_c.texture_grad_linear_mipmap_nearest(tex, uv, dy, uv_da, mip_level_bias, mip_wrapper, mip_stack, filter_mode_enum, boundary_mode_enum)
             return (None, g_tex, g_uv, None, None, None, None, None) + tuple(g_mip_stack)
 
 # Linear and nearest: Mipmaps disabled.
 class _texture_func(torch.autograd.Function):
     @staticmethod
     def forward(ctx, filter_mode, tex, uv, filter_mode_enum, boundary_mode_enum):
-        out = _get_plugin().texture_fwd(tex, uv, filter_mode_enum, boundary_mode_enum)
+        out = _nvdiffrast_c.texture_fwd(tex, uv, filter_mode_enum, boundary_mode_enum)
         ctx.save_for_backward(tex, uv)
         ctx.saved_misc = filter_mode, filter_mode_enum, boundary_mode_enum
         return out
@@ -516,10 +400,10 @@ class _texture_func(torch.autograd.Function):
         tex, uv = ctx.saved_tensors
         filter_mode, filter_mode_enum, boundary_mode_enum = ctx.saved_misc
         if filter_mode == 'linear':
-            g_tex, g_uv = _get_plugin().texture_grad_linear(tex, uv, dy, filter_mode_enum, boundary_mode_enum)
+            g_tex, g_uv = _nvdiffrast_c.texture_grad_linear(tex, uv, dy, filter_mode_enum, boundary_mode_enum)
             return None, g_tex, g_uv, None, None
         else: # nearest
-            g_tex = _get_plugin().texture_grad_nearest(tex, uv, dy, filter_mode_enum, boundary_mode_enum)
+            g_tex = _nvdiffrast_c.texture_grad_nearest(tex, uv, dy, filter_mode_enum, boundary_mode_enum)
             return None, g_tex, None, None, None
 
 # Op wrapper.
@@ -604,14 +488,14 @@ def texture(tex, uv, uv_da=None, mip_level_bias=None, mip=None, filter_mode='aut
     if 'mipmap' in filter_mode:
         mip_wrapper, mip_stack = None, []
         if mip is not None:
-            assert isinstance(mip, (_get_plugin().TextureMipWrapper, list))
+            assert isinstance(mip, (_nvdiffrast_c.TextureMipWrapper, list))
             if isinstance(mip, list):
                 assert all(isinstance(x, torch.Tensor) for x in mip)
                 mip_stack = mip
             else:
                 mip_wrapper = mip
         else:
-            mip_wrapper = _get_plugin().texture_construct_mip(tex, max_mip_level, boundary_mode == 'cube')
+            mip_wrapper = _nvdiffrast_c.texture_construct_mip(tex, max_mip_level, boundary_mode == 'cube')
 
     # Choose stub.
     if filter_mode == 'linear-mipmap-linear' or filter_mode == 'linear-mipmap-nearest':
@@ -643,7 +527,7 @@ def texture_construct_mip(tex, max_mip_level=None, cube_mode=False):
     else:
         max_mip_level = int(max_mip_level)
         assert max_mip_level >= 0
-    return _get_plugin().texture_construct_mip(tex, max_mip_level, cube_mode)
+    return _nvdiffrast_c.texture_construct_mip(tex, max_mip_level, cube_mode)
 
 #----------------------------------------------------------------------------
 # Antialias.
@@ -652,7 +536,7 @@ def texture_construct_mip(tex, max_mip_level=None, cube_mode=False):
 class _antialias_func(torch.autograd.Function):
     @staticmethod
     def forward(ctx, color, rast, pos, tri, topology_hash, pos_gradient_boost):
-        out, work_buffer = _get_plugin().antialias_fwd(color, rast, pos, tri, topology_hash)
+        out, work_buffer = _nvdiffrast_c.antialias_fwd(color, rast, pos, tri, topology_hash)
         ctx.save_for_backward(color, rast, pos, tri)
         ctx.saved_misc = pos_gradient_boost, work_buffer
         return out
@@ -661,7 +545,7 @@ class _antialias_func(torch.autograd.Function):
     def backward(ctx, dy):
         color, rast, pos, tri = ctx.saved_tensors
         pos_gradient_boost, work_buffer = ctx.saved_misc
-        g_color, g_pos = _get_plugin().antialias_grad(color, rast, pos, tri, dy, work_buffer)
+        g_color, g_pos = _nvdiffrast_c.antialias_grad(color, rast, pos, tri, dy, work_buffer)
         if pos_gradient_boost != 1.0:
             g_pos = g_pos * pos_gradient_boost
         return g_color, None, g_pos, None, None, None
@@ -699,9 +583,9 @@ def antialias(color, rast, pos, tri, topology_hash=None, pos_gradient_boost=1.0)
 
     # Construct topology hash unless provided by user.
     if topology_hash is not None:
-        assert isinstance(topology_hash, _get_plugin().TopologyHashWrapper)
+        assert isinstance(topology_hash, _nvdiffrast_c.TopologyHashWrapper)
     else:
-        topology_hash = _get_plugin().antialias_construct_topology_hash(tri)
+        topology_hash = _nvdiffrast_c.antialias_construct_topology_hash(tri)
 
     # Instantiate the function.
     return _antialias_func.apply(color, rast, pos, tri, topology_hash, pos_gradient_boost)
@@ -722,6 +606,6 @@ def antialias_construct_topology_hash(tri):
         `antialias()` in the `topology_hash` argument.
     """
     assert isinstance(tri, torch.Tensor)
-    return _get_plugin().antialias_construct_topology_hash(tri)
+    return _nvdiffrast_c.antialias_construct_topology_hash(tri)
 
 #----------------------------------------------------------------------------

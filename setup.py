@@ -9,6 +9,7 @@
 import nvdiffrast
 import setuptools
 import os
+from torch.utils.cpp_extension import BuildExtension, CUDAExtension
 
 with open("README.md", "r") as fh:
     long_description = fh.read()
@@ -34,15 +35,42 @@ setuptools.setup(
             'common/cudaraster/impl/*.hpp',
             'common/cudaraster/impl/*.inl',
             'common/cudaraster/impl/*.cu',
-            'lib/*.h',
             'torch/*.h',
             'torch/*.inl',
             'torch/*.cpp',
-            'tensorflow/*.cu',
-        ] + (['lib/*.lib'] if os.name == 'nt' else [])
+        ]
     },
     include_package_data=True,
-    install_requires=['numpy'],  # note: can't require torch here as it will install torch even for a TensorFlow container
+    ext_modules=[
+        CUDAExtension(
+            "_nvdiffrast_c",
+            sources=[
+                "nvdiffrast/common/antialias.cu",
+                "nvdiffrast/common/common.cpp",
+                "nvdiffrast/common/cudaraster/impl/Buffer.cpp",
+                "nvdiffrast/common/cudaraster/impl/CudaRaster.cpp",
+                "nvdiffrast/common/cudaraster/impl/RasterImpl.cpp",
+                "nvdiffrast/common/cudaraster/impl/RasterImpl_kernel.cu",
+                "nvdiffrast/common/interpolate.cu",
+                "nvdiffrast/common/rasterize.cu",
+                "nvdiffrast/common/texture.cpp",
+                "nvdiffrast/common/texture_kernel.cu",
+                "nvdiffrast/torch/torch_antialias.cpp",
+                "nvdiffrast/torch/torch_bindings.cpp",
+                "nvdiffrast/torch/torch_interpolate.cpp",
+                "nvdiffrast/torch/torch_rasterize.cpp",
+                "nvdiffrast/torch/torch_texture.cpp",
+            ],
+            extra_compile_args={
+                "cxx": ["-DNVDR_TORCH"]
+                # Disable warnings in torch headers.
+                + (["/wd4067", "/wd4624"] if os.name == "nt" else []),
+                "nvcc": ["-DNVDR_TORCH", "-lineinfo"],
+            },
+        )
+    ],
+    cmdclass={"build_ext": BuildExtension},
+    install_requires=['numpy'],
     classifiers=[
         "Programming Language :: Python :: 3",
         "Operating System :: OS Independent",
