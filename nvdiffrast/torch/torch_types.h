@@ -9,24 +9,6 @@
 #include "torch_common.inl"
 
 //------------------------------------------------------------------------
-// Python GL state wrapper.
-
-class RasterizeGLState;
-class RasterizeGLStateWrapper
-{
-public:
-    RasterizeGLStateWrapper     (bool enableDB, bool automatic, int cudaDeviceIdx);
-    ~RasterizeGLStateWrapper    (void);
-
-    void setContext             (void);
-    void releaseContext         (void);
-
-    RasterizeGLState*           pState;
-    bool                        automatic;
-    int                         cudaDeviceIdx;
-};
-
-//------------------------------------------------------------------------
 // Python CudaRaster state wrapper.
 
 namespace CR { class CudaRaster; }

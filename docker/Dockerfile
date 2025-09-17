@@ -31,17 +31,9 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-ins
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
-# for GLEW
-ENV LD_LIBRARY_PATH /usr/lib64:$LD_LIBRARY_PATH
-
 # nvidia-container-runtime
 ENV NVIDIA_VISIBLE_DEVICES all
 ENV NVIDIA_DRIVER_CAPABILITIES compute,utility,graphics
-
-# Default pyopengl to EGL for good headless rendering support
-ENV PYOPENGL_PLATFORM egl
-
-COPY docker/10_nvidia.json /usr/share/glvnd/egl_vendor.d/10_nvidia.json
 
 RUN pip install --upgrade pip
 RUN pip install ninja imageio imageio-ffmpeg

@@ -9,7 +9,6 @@
 import argparse
 import os
 import pathlib
-import sys
 import numpy as np
 import torch
 
@@ -55,8 +54,7 @@ def fit_earth(max_iter          = 20000,
               texsave_interval  = None,
               texsave_fn        = None,
               imgsave_interval  = None,
-              imgsave_fn        = None,
-              use_opengl        = False):
+              imgsave_fn        = None):
 
     log_file = None
     if out_dir:
@@ -87,7 +85,7 @@ def fit_earth(max_iter          = 20000,
 
     tex     = torch.from_numpy(tex.astype(np.float32)).cuda()
     tex_opt = torch.full(tex.shape, 0.2, device='cuda', requires_grad=True)
-    glctx = dr.RasterizeGLContext() if use_opengl else dr.RasterizeCudaContext()
+    glctx = dr.RasterizeCudaContext()
 
     ang = 0.0
 
@@ -178,7 +176,6 @@ def fit_earth(max_iter          = 20000,
 
 def main():
     parser = argparse.ArgumentParser(description='Earth texture fitting example')
-    parser.add_argument('--opengl', help='enable OpenGL rendering', action='store_true', default=False)
     parser.add_argument('--outdir', help='specify output directory', default='')
     parser.add_argument('--mip', help='enable mipmapping', action='store_true', default=False)
     parser.add_argument('--display-interval', type=int, default=0)
@@ -195,7 +192,7 @@ def main():
         print ('No output directory specified, not saving log or images')
 
     # Run.
-    fit_earth(max_iter=args.max_iter, log_interval=10, display_interval=args.display_interval, enable_mip=args.mip, out_dir=out_dir, log_fn='log.txt', texsave_interval=1000, texsave_fn='tex_%06d.png', imgsave_interval=1000, imgsave_fn='img_%06d.png', use_opengl=args.opengl)
+    fit_earth(max_iter=args.max_iter, log_interval=10, display_interval=args.display_interval, enable_mip=args.mip, out_dir=out_dir, log_fn='log.txt', texsave_interval=1000, texsave_fn='tex_%06d.png', imgsave_interval=1000, imgsave_fn='img_%06d.png')
 
     # Done.
     print("Done.")

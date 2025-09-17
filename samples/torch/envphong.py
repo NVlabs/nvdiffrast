@@ -10,7 +10,6 @@ import argparse
 import numpy as np
 import torch
 import os
-import sys
 import pathlib
 import imageio
 
@@ -32,8 +31,7 @@ def fit_env_phong(max_iter          = 1000,
                   out_dir           = None,
                   log_fn            = None,
                   mp4save_interval  = None,
-                  mp4save_fn        = None,
-                  use_opengl        = False):
+                  mp4save_fn        = None):
 
     log_file = None
     writer = None
@@ -75,7 +73,7 @@ def fit_env_phong(max_iter          = 1000,
     # Render.
     ang = 0.0
     imgloss_avg, phong_avg = [], []
-    glctx = dr.RasterizeGLContext() if use_opengl else dr.RasterizeCudaContext()
+    glctx = dr.RasterizeCudaContext()
     zero_tensor = torch.as_tensor(0.0, dtype=torch.float32, device='cuda')
     one_tensor = torch.as_tensor(1.0, dtype=torch.float32, device='cuda')
 
@@ -194,7 +192,6 @@ def fit_env_phong(max_iter          = 1000,
 
 def main():
     parser = argparse.ArgumentParser(description='Environment map fitting example')
-    parser.add_argument('--opengl', help='enable OpenGL rendering', action='store_true', default=False)
     parser.add_argument('--outdir', help='specify output directory', default='')
     parser.add_argument('--display-interval', type=int, default=0)
     parser.add_argument('--mp4save-interval', type=int, default=10)
@@ -217,7 +214,6 @@ def main():
         out_dir=out_dir,
         mp4save_interval=args.mp4save_interval,
         mp4save_fn='progress.mp4',
-        use_opengl=args.opengl
     )
 
     # Done.

@@ -10,18 +10,11 @@ import imageio
 import numpy as np
 import torch
 import nvdiffrast.torch as dr
-import sys
 
 def tensor(*args, **kwargs):
     return torch.tensor(*args, device='cuda', **kwargs)
 
-if sys.argv[1:] == ['--cuda']:
-    glctx = dr.RasterizeCudaContext()
-elif sys.argv[1:] == ['--opengl']:
-    glctx = dr.RasterizeGLContext()
-else:
-    print("Specify either --cuda or --opengl")
-    exit(1)
+glctx = dr.RasterizeCudaContext()
 
 pos = tensor([[[-0.8, -0.8, 0, 1], [0.8, -0.8, 0, 1], [-0.8, 0.8, 0, 1]]], dtype=torch.float32)
 col = tensor([[[1, 0, 0], [0, 1, 0], [0, 0, 1]]], dtype=torch.float32)

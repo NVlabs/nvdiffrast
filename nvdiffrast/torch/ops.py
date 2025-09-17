@@ -68,73 +68,13 @@ class RasterizeCudaContext:
         self.active_depth_peeler = None
 
 #----------------------------------------------------------------------------
-# GL state wrapper.
-#----------------------------------------------------------------------------
-
-class RasterizeGLContext:
-    def __init__(self, output_db=True, mode='automatic', device=None):
-        '''Create a new OpenGL rasterizer context.
-
-        Creating an OpenGL context is a slow operation so you should usually reuse the same
-        context in all calls to `rasterize()` on the same CPU thread. The OpenGL context
-        is deleted when the object is destroyed.
-
-        Side note: When using the OpenGL context in a rasterization operation, the
-        context's internal framebuffer object is automatically enlarged to accommodate the
-        rasterization operation's output shape, but it is never shrunk in size until the
-        context is destroyed. Thus, if you need to rasterize, say, deep low-resolution
-        tensors and also shallow high-resolution tensors, you can conserve GPU memory by
-        creating two separate OpenGL contexts for these tasks. In this scenario, using the
-        same OpenGL context for both tasks would end up reserving GPU memory for a deep,
-        high-resolution output tensor.
-
-        Args:
-          output_db (bool): Compute and output image-space derivates of barycentrics.
-          mode: OpenGL context handling mode. Valid values are 'manual' and 'automatic'.
-          device (Optional): Cuda device on which the context is created. Type can be
-                             `torch.device`, string (e.g., `'cuda:1'`), or int. If not
-                             specified, context will be created on currently active Cuda
-                             device.
-        Returns:
-          The newly created OpenGL rasterizer context.
-        '''
-        assert output_db is True or output_db is False
-        assert mode in ['automatic', 'manual']
-        self.output_db = output_db
-        self.mode = mode
-        if device is None:
-            cuda_device_idx = torch.cuda.current_device()
-        else:
-            with torch.cuda.device(device):
-                cuda_device_idx = torch.cuda.current_device()
-        self.cpp_wrapper = _get_plugin(gl=True).RasterizeGLStateWrapper(output_db, mode == 'automatic', cuda_device_idx)
-        self.active_depth_peeler = None # For error checking only.
-
-    def set_context(self):
-        '''Set (activate) OpenGL context in the current CPU thread.
-           Only available if context was created in manual mode.
-        '''
-        assert self.mode == 'manual'
-        self.cpp_wrapper.set_context()
-
-    def release_context(self):
-        '''Release (deactivate) currently active OpenGL context.
-           Only available if context was created in manual mode.
-        '''
-        assert self.mode == 'manual'
-        self.cpp_wrapper.release_context()
-
-#----------------------------------------------------------------------------
 # Rasterize.
 #----------------------------------------------------------------------------
 
 class _rasterize_func(torch.autograd.Function):
     @staticmethod
     def forward(ctx, raster_ctx, pos, tri, resolution, ranges, grad_db, peeling_idx):
-        if isinstance(raster_ctx, RasterizeGLContext):
-            out, out_db = _get_plugin(gl=True).rasterize_fwd_gl(raster_ctx.cpp_wrapper, pos, tri, resolution, ranges, peeling_idx)
-        else:
-            out, out_db = _nvdiffrast_c.rasterize_fwd_cuda(raster_ctx.cpp_wrapper, pos, tri, resolution, ranges, peeling_idx)
+        out, out_db = _nvdiffrast_c.rasterize_fwd_cuda(raster_ctx.cpp_wrapper, pos, tri, resolution, ranges, peeling_idx)
         ctx.save_for_backward(pos, tri, out)
         ctx.saved_grad_db = grad_db
         return out, out_db
@@ -157,7 +97,7 @@ def rasterize(glctx, pos, tri, resolution, ranges=None, grad_db=True):
     output tensors will be contiguous and reside in GPU memory.
 
     Args:
-        glctx: Rasterizer context of type `RasterizeGLContext` or `RasterizeCudaContext`.
+        glctx: Rasterizer context of type `RasterizeCudaContext`.
         pos: Vertex position tensor with dtype `torch.float32`. To enable range
              mode, this tensor should have a 2D shape [num_vertices, 4]. To enable
              instanced mode, use a 3D shape [minibatch_size, num_vertices, 4].
@@ -167,19 +107,19 @@ def rasterize(glctx, pos, tri, resolution, ranges=None, grad_db=True):
                 `torch.int32`, specifying start indices and counts into `tri`.
                 Ignored in instanced mode.
         grad_db: Propagate gradients of image-space derivatives of barycentrics
-                 into `pos` in backward pass. Ignored if using an OpenGL context that
-                 was not configured to output image-space derivatives.
+                 into `pos` in backward pass. Ignored if using a rasterization context
+                 that was not configured to output image-space derivatives.
 
     Returns:
         A tuple of two tensors. The first output tensor has shape [minibatch_size,
         height, width, 4] and contains the main rasterizer output in order (u, v, z/w,
-        triangle_id). If the OpenGL context was configured to output image-space
+        triangle_id). If the rasterization context was configured to output image-space
         derivatives of barycentrics, the second output tensor will also have shape
         [minibatch_size, height, width, 4] and contain said derivatives in order
         (du/dX, du/dY, dv/dX, dv/dY). Otherwise it will be an empty tensor with shape
         [minibatch_size, height, width, 0].
     '''
-    assert isinstance(glctx, (RasterizeGLContext, RasterizeCudaContext))
+    assert isinstance(glctx, RasterizeCudaContext)
     assert grad_db is True or grad_db is False
     grad_db = grad_db and glctx.output_db
 
@@ -211,7 +151,7 @@ class DepthPeeler:
         Returns:
           The newly created depth peeler.
         '''
-        assert isinstance(glctx, (RasterizeGLContext, RasterizeCudaContext))
+        assert isinstance(glctx, RasterizeCudaContext)
         assert grad_db is True or grad_db is False
         grad_db = grad_db and glctx.output_db
 

@@ -9,7 +9,6 @@
 import argparse
 import os
 import pathlib
-import sys
 import numpy as np
 import torch
 import imageio
@@ -132,8 +131,7 @@ def fit_pose(max_iter           = 10000,
              out_dir            = None,
              log_fn             = None,
              mp4save_interval   = None,
-             mp4save_fn         = None,
-             use_opengl         = False):
+             mp4save_fn         = None):
 
     log_file = None
     writer = None
@@ -161,7 +159,7 @@ def fit_pose(max_iter           = 10000,
     col_idx = torch.from_numpy(col_idx.astype(np.int32)).cuda()
     vtx_col = torch.from_numpy(col.astype(np.float32)).cuda()
 
-    glctx = dr.RasterizeGLContext() if use_opengl else dr.RasterizeCudaContext()
+    glctx = dr.RasterizeCudaContext()
 
     for rep in range(repeats):
         pose_target = torch.tensor(q_rnd(), device='cuda')
@@ -254,7 +252,6 @@ def fit_pose(max_iter           = 10000,
 
 def main():
     parser = argparse.ArgumentParser(description='Cube pose fitting example')
-    parser.add_argument('--opengl', help='enable OpenGL rendering', action='store_true', default=False)
     parser.add_argument('--outdir', help='specify output directory', default='')
     parser.add_argument('--display-interval', type=int, default=0)
     parser.add_argument('--mp4save-interval', type=int, default=10)
@@ -280,7 +277,6 @@ def main():
         log_fn='log.txt',
         mp4save_interval=args.mp4save_interval,
         mp4save_fn='progress.mp4',
-        use_opengl=args.opengl
     )
 
     # Done.
