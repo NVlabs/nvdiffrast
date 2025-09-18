@@ -11,24 +11,6 @@
 // Framework-specific macros to enable code sharing.
 
 //------------------------------------------------------------------------
-// Tensorflow.
-
-#ifdef NVDR_TENSORFLOW
-#define EIGEN_USE_GPU
-#include "tensorflow/core/framework/op.h"
-#include "tensorflow/core/framework/op_kernel.h"
-#include "tensorflow/core/framework/shape_inference.h"
-#include "tensorflow/core/platform/default/logging.h"
-using namespace tensorflow;
-using namespace tensorflow::shape_inference;
-#define NVDR_CTX_ARGS OpKernelContext* _nvdr_ctx
-#define NVDR_CTX_PARAMS _nvdr_ctx
-#define NVDR_CHECK(COND, ERR) OP_REQUIRES(_nvdr_ctx, COND, errors::Internal(ERR))
-#define NVDR_CHECK_CUDA_ERROR(CUDA_CALL) OP_CHECK_CUDA_ERROR(_nvdr_ctx, CUDA_CALL)
-#define NVDR_CHECK_GL_ERROR(GL_CALL) OP_CHECK_GL_ERROR(_nvdr_ctx, GL_CALL)
-#endif
-
-//------------------------------------------------------------------------
 // PyTorch.
 
 #ifdef NVDR_TORCH
