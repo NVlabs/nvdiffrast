@@ -282,8 +282,11 @@ __device__ __inline__ void triangleSetupImpl(const CRParams p)
         }
     }
 
-    // Inside depth range => try to snap vertices.
+#if 0
+    // This test is a little sloppy and may result in a shared edge being clipped in one triangle
+    // and not in another. This increases the potential of pixel leaks at shared edges.
 
+    // Inside depth range => try to snap vertices.
     if (v0.w >= fabsf(v0.z) & v1.w >= fabsf(v1.z) & v2.w >= fabsf(v2.z))
     {
         // Inside S16 range and small enough => fast path.
@@ -316,6 +319,38 @@ __device__ __inline__ void triangleSetupImpl(const CRParams p)
             return;
         }
     }
+
+#else // Strict test that skips the clipper only for triangles completely inside the view frustum.
+
+    // Inside view frustum => fast path.
+//    if (v0.w >= fabsf(v0.x) & v1.w >= fabsf(v1.x) & v2.w >= fabsf(v2.x) &
+//        v0.w >= fabsf(v0.y) & v1.w >= fabsf(v1.y) & v2.w >= fabsf(v2.y) &
+//        v0.w >= fabsf(v0.z) & v1.w >= fabsf(v1.z) & v2.w >= fabsf(v2.z))
+    if (v0.w >= fmaxf(fmaxf(fabsf(v0.x), fabsf(v0.y)), fabsf(v0.z)) &&
+        v1.w >= fmaxf(fmaxf(fabsf(v1.x), fabsf(v1.y)), fabsf(v1.z)) &&
+        v2.w >= fmaxf(fmaxf(fabsf(v2.x), fabsf(v2.y)), fabsf(v2.z)))
+    {
+        int2 p0, p1, p2, lo, hi;
+        float3 rcpW;
+
+        snapTriangle(p, v0, v1, v2, p0, p1, p2, rcpW, lo, hi);
+
+        int2 d1, d2;
+        S32 area;
+        bool res = prepareTriangle(p, p0, p1, p2, lo, hi, d1, d2, area);
+        triSubtris[taskIdx] = res ? 1 : 0;
+
+        if (res)
+            setupTriangle(
+                p,
+                &triHeader[taskIdx], &triData[taskIdx], vidx.w,
+                v0.z, v1.z, v2.z,
+                p0, p1, p2, rcpW,
+                d1, d2, area);
+
+        return;
+    }
+#endif
 
     // Clip to view frustum.
 
