@@ -1,0 +1,30 @@
+[build-system]
+requires = [
+  "setuptools>=64",
+  "wheel",
+  "ninja",
+]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nvdiffrast"
+version = "0.4.0"
+description = "nvdiffrast - modular primitives for high-performance differentiable rendering"
+readme = "README.md"
+requires-python = ">=3.6"
+license = {text = "NVIDIA Proprietary"}
+authors = [{name = "Samuli Laine", email = "slaine@nvidia.com"}]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+]
+dependencies = ["numpy"]
+
+[project.urls]
+Homepage = "https://github.com/NVlabs/nvdiffrast"
+Repository = "https://github.com/NVlabs/nvdiffrast"
+Documentation = "https://nvlabs.github.io/nvdiffrast/"
+
+[tool.setuptools.packages.find]
+include = ["nvdiffrast", "nvdiffrast.torch"]
+exclude = ["nvdiffrast.common*"]

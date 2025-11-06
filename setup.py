@@ -6,60 +6,45 @@
 # distribution of this software and related documentation without an express
 # license agreement from NVIDIA CORPORATION is strictly prohibited.
 
-import nvdiffrast
 import setuptools
 import os
-from torch.utils.cpp_extension import BuildExtension, CUDAExtension
 
-with open("README.md", "r") as fh:
-    long_description = fh.read()
+# Print an error message if there's no PyTorch installed.
+try:
+    from torch.utils.cpp_extension import BuildExtension, CUDAExtension
+except ImportError:
+    # This happens if the user runs 'pip install .' (default build isolation)
+    # OR if they simply don't have torch installed at all.
+    print("\n\n" + "*" * 70)
+    print("ERROR: PyTorch is not installed in the build environment!")
+    print("To fix this, you have two options:\n")
+    print("1. Install PyTorch in your environment first, then run:")
+    print("   pip install . --no-build-isolation\n")
+    print("2. If you are building a wheel for distribution, ensure")
+    print("   PyTorch is installed in your build environment.")
+    print("*" * 70 + "\n\n")
+    raise
 
 setuptools.setup(
-    name="nvdiffrast",
-    version=nvdiffrast.__version__,
-    author="Samuli Laine",
-    author_email="slaine@nvidia.com",
-    description="nvdiffrast - modular primitives for high-performance differentiable rendering",
-    long_description=long_description,
-    long_description_content_type="text/markdown",
-    url="https://github.com/NVlabs/nvdiffrast",
-    packages=setuptools.find_packages(),
-    package_data={
-        'nvdiffrast': [
-            'common/*.h',
-            'common/*.inl',
-            'common/*.cu',
-            'common/*.cpp',
-            'common/cudaraster/*.hpp',
-            'common/cudaraster/impl/*.cpp',
-            'common/cudaraster/impl/*.hpp',
-            'common/cudaraster/impl/*.inl',
-            'common/cudaraster/impl/*.cu',
-            'torch/*.h',
-            'torch/*.inl',
-            'torch/*.cpp',
-        ]
-    },
-    include_package_data=True,
     ext_modules=[
         CUDAExtension(
             "_nvdiffrast_c",
             sources=[
-                "nvdiffrast/common/antialias.cu",
-                "nvdiffrast/common/common.cpp",
-                "nvdiffrast/common/cudaraster/impl/Buffer.cpp",
-                "nvdiffrast/common/cudaraster/impl/CudaRaster.cpp",
-                "nvdiffrast/common/cudaraster/impl/RasterImpl.cpp",
-                "nvdiffrast/common/cudaraster/impl/RasterImpl_kernel.cu",
-                "nvdiffrast/common/interpolate.cu",
-                "nvdiffrast/common/rasterize.cu",
-                "nvdiffrast/common/texture.cpp",
-                "nvdiffrast/common/texture_kernel.cu",
-                "nvdiffrast/torch/torch_antialias.cpp",
-                "nvdiffrast/torch/torch_bindings.cpp",
-                "nvdiffrast/torch/torch_interpolate.cpp",
-                "nvdiffrast/torch/torch_rasterize.cpp",
-                "nvdiffrast/torch/torch_texture.cpp",
+                "csrc/common/antialias.cu",
+                "csrc/common/common.cpp",
+                "csrc/common/cudaraster/impl/Buffer.cpp",
+                "csrc/common/cudaraster/impl/CudaRaster.cpp",
+                "csrc/common/cudaraster/impl/RasterImpl.cpp",
+                "csrc/common/cudaraster/impl/RasterImpl_kernel.cu",
+                "csrc/common/interpolate.cu",
+                "csrc/common/rasterize.cu",
+                "csrc/common/texture.cpp",
+                "csrc/common/texture_kernel.cu",
+                "csrc/torch/torch_antialias.cpp",
+                "csrc/torch/torch_bindings.cpp",
+                "csrc/torch/torch_interpolate.cpp",
+                "csrc/torch/torch_rasterize.cpp",
+                "csrc/torch/torch_texture.cpp",
             ],
             extra_compile_args={
                 "cxx": ["-DNVDR_TORCH"]
@@ -70,10 +55,4 @@ setuptools.setup(
         )
     ],
     cmdclass={"build_ext": BuildExtension},
-    install_requires=['numpy'],
-    classifiers=[
-        "Programming Language :: Python :: 3",
-        "Operating System :: OS Independent",
-    ],
-    python_requires='>=3.6',
 )
