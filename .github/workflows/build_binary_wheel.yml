@@ -24,7 +24,6 @@ jobs:
         with:
           cuda: '11.8.0'
           method: 'network'
-          sub-packages: '["nvcc", "cudart", "cusparse", "cublas", "thrust", "visual_studio_integration"]'
           use-github-cache: false
           use-local-cache: false
 
