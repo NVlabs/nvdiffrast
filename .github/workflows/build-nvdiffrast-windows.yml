@@ -1,4 +1,4 @@
-name: Build nvdiffrast Windows CUDA 11.8
+name: Build nvdiffrast Windows CUDA 11.8 (NumPy 1.26.4)
 
 on: [push, pull_request]
 
@@ -21,9 +21,9 @@ jobs:
           where cl.exe
         shell: powershell
 
-      - name: Install dependencies
+      - name: Install build system + essential deps
         run: |
-          pip install ninja wheel build
+          pip install wheel build ninja setuptools
         shell: powershell
 
       - name: Install PyTorch 2.2.2 (CUDA 11.8)
@@ -31,14 +31,19 @@ jobs:
           pip install torch==2.2.2 torchvision==0.17.2 torchaudio==2.2.2 --extra-index-url https://download.pytorch.org/whl/cu118
         shell: powershell
 
+      - name: Install NumPy 1.26.4
+        run: |
+          pip install numpy==1.26.4
+        shell: powershell
+
       - name: Build nvdiffrast wheel
         run: |
           python -m build --wheel
-          # OR: pip wheel . -w dist
+          # Or: pip wheel . -w dist
         shell: powershell
 
       - name: Upload wheel artifact
         uses: actions/upload-artifact@v4
         with:
-          name: nvdiffrast-windows-cu118
+          name: nvdiffrast-windows-cu118-numpy1264
           path: dist/*.whl
