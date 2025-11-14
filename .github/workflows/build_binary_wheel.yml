@@ -78,7 +78,18 @@ jobs:
         run: |
           $ErrorActionPreference = 'Continue'
 
-          Write-Host "=== Building binary wheel with CUDA extensions ==="
+          Write-Host "=== Setting up MSVC environment ==="
+          # Find and activate Visual Studio Developer environment
+          $vsPath = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath
+          Write-Host "Visual Studio path: $vsPath"
+
+          Import-Module "$vsPath\Common7\Tools\Microsoft.VisualStudio.DevShell.dll"
+          Enter-VsDevShell -VsInstallPath $vsPath -SkipAutomaticLocation -DevCmdArguments "-arch=x64 -host_arch=x64"
+
+          Write-Host "Verifying cl.exe is now in PATH:"
+          where.exe cl.exe
+
+          Write-Host "`n=== Building binary wheel with CUDA extensions ==="
           $env:BUILD_BINARY_WHEEL = "1"
           $env:TORCH_CUDA_ARCH_LIST = "6.0 6.1 7.0 7.5 8.0 8.6 8.9 9.0"
           $env:DISTUTILS_USE_SDK = "1"
