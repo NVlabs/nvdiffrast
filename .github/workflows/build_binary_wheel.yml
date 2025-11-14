@@ -96,13 +96,13 @@ jobs:
           pip install $wheel.FullName
 
           Write-Host "`n=== Testing import ==="
-          python -c "import nvdiffrast.torch as dr; print('✓ nvdiffrast imported successfully')"
+          python -c "import nvdiffrast.torch as dr; print('[OK] nvdiffrast imported successfully')"
 
           Write-Host "`n=== Testing CUDA plugin load ==="
-          python -c "from nvdiffrast.torch import ops; plugin = ops._get_plugin(); print('✓ CUDA plugin loaded successfully')"
+          python -c "from nvdiffrast.torch import ops; plugin = ops._get_plugin(); print('[OK] CUDA plugin loaded successfully')"
 
           Write-Host "`n=== Verifying pre-compiled plugin ==="
-          python -c "import sys; import nvdiffrast_plugin; print('✓ Pre-compiled plugin found:', nvdiffrast_plugin.__file__)"
+          python -c "import sys; import nvdiffrast_plugin; print('[OK] Pre-compiled plugin found:', nvdiffrast_plugin.__file__)"
         shell: powershell
 
       - name: Upload wheel artifact

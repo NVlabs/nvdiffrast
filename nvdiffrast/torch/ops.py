@@ -32,7 +32,7 @@ def _get_plugin(gl=False):
             import nvdiffrast_plugin
             _cached_plugin[gl] = nvdiffrast_plugin
 
-        logging.getLogger('nvdiffrast').info("✓ Loaded pre-compiled nvdiffrast plugin")
+        logging.getLogger('nvdiffrast').info("[OK] Loaded pre-compiled nvdiffrast plugin")
         return _cached_plugin[gl]
     except ImportError:
         # Pre-compiled extension not found, fall back to JIT compilation

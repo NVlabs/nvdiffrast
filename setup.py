@@ -27,9 +27,9 @@ BUILD_BINARY = os.environ.get('BUILD_BINARY_WHEEL', '0') == '1'
 if BUILD_BINARY:
     try:
         from torch.utils.cpp_extension import BuildExtension, CUDAExtension
-        print("🔧 Building BINARY wheel with pre-compiled CUDA extensions")
+        print("[BUILD] Building BINARY wheel with pre-compiled CUDA extensions")
     except ImportError:
-        print("⚠️  PyTorch not found, falling back to source wheel")
+        print("[WARNING] PyTorch not found, falling back to source wheel")
         BUILD_BINARY = False
 
 # Get repository root
@@ -56,7 +56,7 @@ setup_kwargs = {
 
 if BUILD_BINARY:
     # Binary wheel configuration with pre-compiled CUDA extensions
-    print("📦 Configuring CUDA extension compilation...")
+    print("[BUILD] Configuring CUDA extension compilation...")
 
     # Define source files for CUDA extension
     cuda_sources = [
@@ -115,12 +115,12 @@ if BUILD_BINARY:
         "zip_safe": False,
     })
 
-    print(f"✓ CUDA sources: {len(cuda_sources)} files")
-    print(f"✓ Include dirs: {include_dirs}")
+    print(f"[BUILD] CUDA sources: {len(cuda_sources)} files")
+    print(f"[BUILD] Include dirs: {include_dirs}")
 
 else:
     # Source wheel configuration (fallback - original behavior)
-    print("📦 Building SOURCE wheel (requires JIT compilation at runtime)")
+    print("[BUILD] Building SOURCE wheel (requires JIT compilation at runtime)")
 
     setup_kwargs.update({
         "package_data": {
