@@ -17,7 +17,7 @@ jobs:
       - name: Set up Python 3.11.11
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11.11'
+          python-version: '3.11'
 
       # The standard GitHub Windows runners come pre-installed with the CUDA Toolkit
       # and the required Visual Studio C++ build tools (MSVC).
