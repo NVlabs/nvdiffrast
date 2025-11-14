@@ -89,7 +89,7 @@ if BUILD_BINARY:
     # Compiler flags
     extra_compile_args = {
         'cxx': ['/wd4067', '/wd4624'] if os.name == 'nt' else [],
-        'nvcc': ['-DNVDR_TORCH', '--use_fast_math']
+        'nvcc': ['-DNVDR_TORCH', '--use_fast_math', '-allow-unsupported-compiler']
     }
 
     # Linker flags (Windows)
