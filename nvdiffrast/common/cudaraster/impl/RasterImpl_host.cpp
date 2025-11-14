@@ -324,12 +324,13 @@ void RasterImpl::launchStages(bool instanceMode, bool peel, cudaStream_t stream)
         p.activeTiles       = m_activeTiles.getPtr();
         p.tileFirstSeg      = m_tileFirstSeg.getPtr();
 
+        p.strideX           = m_bufferSizePixels.x;
+        p.strideY           = m_bufferSizePixels.y;
+
         size_t byteOffset = ((size_t)m_offsetPixels.x + (size_t)m_offsetPixels.y * (size_t)p.strideX) * sizeof(U32);
         p.colorBuffer       = m_colorBuffer.getPtr(byteOffset);
         p.depthBuffer       = m_depthBuffer.getPtr(byteOffset);
         p.peelBuffer        = (m_renderModeFlags & CudaRaster::RenderModeFlag_EnableDepthPeeling) ? m_peelBuffer.getPtr(byteOffset) : 0;
-        p.strideX           = m_bufferSizePixels.x;
-        p.strideY           = m_bufferSizePixels.y;
 
         memcpy(&p.imageParamsFirst, imageParams, min(m_numImages, CR_EMBED_IMAGE_PARAMS) * sizeof(CRImageParams));
         p.imageParamsExtra  = (CRImageParams*)m_crImageParamsExtra.getPtr();
