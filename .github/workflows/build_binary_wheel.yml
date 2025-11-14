@@ -8,7 +8,7 @@ on:
 
 jobs:
   build_windows_binary:
-    runs-on: windows-2019  # Has MSVC pre-installed
+    runs-on: windows-2022  # Has MSVC pre-installed
 
     steps:
       - name: Checkout repository
