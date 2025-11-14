@@ -76,25 +76,30 @@ jobs:
 
       - name: Build binary wheel
         run: |
+          $ErrorActionPreference = 'Continue'
+
           Write-Host "=== Building binary wheel with CUDA extensions ==="
           $env:BUILD_BINARY_WHEEL = "1"
           $env:TORCH_CUDA_ARCH_LIST = "6.0 6.1 7.0 7.5 8.0 8.6 8.9 9.0"
           $env:DISTUTILS_USE_SDK = "1"
-          $env:MAX_JOBS = "2"  # Limit parallel compilation to avoid OOM
+          $env:MAX_JOBS = "2"
 
           Write-Host "Build environment:"
           Write-Host "  CUDA_PATH: $env:CUDA_PATH"
           Write-Host "  BUILD_BINARY_WHEEL: $env:BUILD_BINARY_WHEEL"
           Write-Host "  TORCH_CUDA_ARCH_LIST: $env:TORCH_CUDA_ARCH_LIST"
           Write-Host "  MAX_JOBS: $env:MAX_JOBS"
+          Write-Host ""
 
-          python setup.py bdist_wheel 2>&1 | Tee-Object -FilePath build.log
+          python setup.py bdist_wheel > build.log 2>&1
+          $buildExitCode = $LASTEXITCODE
 
-          if ($LASTEXITCODE -ne 0) {
-              Write-Host "`n=== BUILD FAILED ==="
-              Write-Host "Last 50 lines of build log:"
-              Get-Content build.log | Select-Object -Last 50
-              exit 1
+          Write-Host "`n=== Build Output ==="
+          Get-Content build.log
+
+          if ($buildExitCode -ne 0) {
+              Write-Host "`n=== BUILD FAILED (exit code: $buildExitCode) ==="
+              exit $buildExitCode
           }
 
           Write-Host "`n=== Built wheel ==="
