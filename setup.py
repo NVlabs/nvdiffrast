@@ -87,10 +87,30 @@ if BUILD_BINARY:
     ]
 
     # Compiler flags
+    # Windows-specific flags for CUDA 11.8 + VS 2022 compatibility
+    if os.name == 'nt':
+        cxx_flags = [
+            '/wd4067',  # Disable warning: unexpected tokens following preprocessor directive
+            '/wd4624',  # Disable warning: destructor was implicitly defined as deleted
+            '/D_ALLOW_COMPILER_AND_STL_VERSION_MISMATCH',  # Allow CUDA 11.8 with latest VS 2022
+            '/D_SILENCE_ALL_CXX17_DEPRECATION_WARNINGS',  # Silence C++17 deprecation warnings
+            '/bigobj',  # Support large object files (needed for CUDA compilation)
+        ]
+        nvcc_flags = [
+            '-DNVDR_TORCH',
+            '--use_fast_math',
+            '-allow-unsupported-compiler',  # Allow CUDA 11.8 with VS 2022
+            '-D_ALLOW_COMPILER_AND_STL_VERSION_MISMATCH',  # Bypass STL version check
+            '--expt-relaxed-constexpr',  # Allow constexpr extensions
+            '--expt-extended-lambda',  # Allow extended lambda features
+        ]
+    else:
+        cxx_flags = []
+        nvcc_flags = ['-DNVDR_TORCH', '--use_fast_math']
+
     extra_compile_args = {
-        'cxx': ['/wd4067', '/wd4624', '/D_ALLOW_COMPILER_AND_STL_VERSION_MISMATCH'] if os.name == 'nt' else [],
-        'nvcc': ['-DNVDR_TORCH', '--use_fast_math', '-allow-unsupported-compiler',
-                 '-D_ALLOW_COMPILER_AND_STL_VERSION_MISMATCH']
+        'cxx': cxx_flags,
+        'nvcc': nvcc_flags
     }
 
     # Linker flags (Windows)
