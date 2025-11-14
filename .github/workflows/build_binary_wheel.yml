@@ -28,7 +28,7 @@ jobs:
           use-github-cache: false
           use-local-cache: false
 
-      - name: Verify CUDA and MSVC
+      - name: Verify CUDA and Python
         run: |
           Write-Host "=== Python Version ==="
           python --version
@@ -36,12 +36,20 @@ jobs:
           Write-Host "`n=== NVCC Version ==="
           nvcc --version
 
-          Write-Host "`n=== MSVC Compiler ==="
-          where cl.exe
-          cl.exe 2>&1 | Select-String "Version"
-
           Write-Host "`n=== CUDA Environment ==="
           Write-Host "CUDA_PATH: $env:CUDA_PATH"
+
+          Write-Host "`n=== MSVC Compiler (optional check) ==="
+          try {
+              $clPath = where.exe cl.exe 2>$null
+              if ($clPath) {
+                  Write-Host "Found: $clPath"
+              } else {
+                  Write-Host "Not in PATH (will be auto-detected during build)"
+              }
+          } catch {
+              Write-Host "Not in PATH (will be auto-detected during build)"
+          }
         shell: powershell
 
       - name: Install build dependencies
