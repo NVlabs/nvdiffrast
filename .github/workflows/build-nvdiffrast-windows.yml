@@ -4,51 +4,41 @@ on: [push, pull_request]
 
 jobs:
   build_windows:
-    # Use a Windows runner that has a GPU
-    # GitHub-hosted 'windows-latest' runners may not always have a GPU.
-    # You will likely need to use a GitHub-provided larger runner with a GPU, or a self-hosted runner.
-    # We use 'windows-latest' here as a template, assuming it has a suitable driver.
     runs-on: windows-latest
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Python 3.11.11
+      - name: Set up Python 3.11
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      # The standard GitHub Windows runners come pre-installed with the CUDA Toolkit
-      # and the required Visual Studio C++ build tools (MSVC).
-      # We typically don't need a specific 'install-cuda' action like on Linux.
-
-      - name: Verify Python and MSVC C++ Compiler availability
+      - name: Verify Python and MSVC availability
         run: |
           python --version
-          # Check for Visual C++ compiler existence (cl.exe is the compiler)
           where cl.exe
         shell: powershell
 
-      - name: Install dependencies (ninja is required for PyTorch extensions)
-        run: pip install ninja
-        shell: powershell
-
-      - name: Install PyTorch 2.2.2 with CUDA 11.8
-        # PyTorch wheels for Windows bundle necessary CUDA libraries (cuDNN etc.)
-        run: pip install torch==2.2.2 torchvision==0.17.2 torchaudio==2.2.2 --extra-index-url https://download.pytorch.org/whl/cu118
-        shell: powershell
-
-      - name: Install nvdiffrast from source
-        # This step uses the pre-installed VS C++ compiler (MSVC) and the Pytorch CUDA paths
+      - name: Install dependencies
         run: |
-          # The 'pip install .' command will automatically detect the Visual Studio compiler
-          # and the PyTorch/CUDA environment variables to build the C++ extensions.
-          pip install .
+          pip install ninja wheel build
         shell: powershell
-        working-directory: ./ # Assumes nvdiffrast source is at the root of the repo
 
-      - name: Verify nvdiffrast installation
+      - name: Install PyTorch 2.2.2 (CUDA 11.8)
         run: |
-          python -c "import nvdiffrast; print('nvdiffrast installed successfully')"
+          pip install torch==2.2.2 torchvision==0.17.2 torchaudio==2.2.2 --extra-index-url https://download.pytorch.org/whl/cu118
         shell: powershell
+
+      - name: Build nvdiffrast wheel
+        run: |
+          python -m build --wheel
+          # OR: pip wheel . -w dist
+        shell: powershell
+
+      - name: Upload wheel artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nvdiffrast-windows-cu118
+          path: dist/*.whl
