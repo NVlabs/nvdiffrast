@@ -63,12 +63,12 @@ if BUILD_BINARY:
         'nvdiffrast/common/cudaraster/impl/Buffer.cpp',
         'nvdiffrast/common/cudaraster/impl/CudaRaster.cpp',
         'nvdiffrast/common/cudaraster/impl/RasterImpl.cu',
-        'nvdiffrast/common/cudaraster/impl/RasterImpl.cpp',
+        'nvdiffrast/common/cudaraster/impl/RasterImpl_host.cpp',
         'nvdiffrast/common/common.cpp',
         'nvdiffrast/common/rasterize.cu',
         'nvdiffrast/common/interpolate.cu',
         'nvdiffrast/common/texture.cu',
-        'nvdiffrast/common/texture.cpp',
+        'nvdiffrast/common/texture_host.cpp',
         'nvdiffrast/common/antialias.cu',
         'nvdiffrast/torch/torch_bindings.cpp',
         'nvdiffrast/torch/torch_rasterize.cpp',
@@ -104,11 +104,10 @@ if BUILD_BINARY:
             '-D_ALLOW_COMPILER_AND_STL_VERSION_MISMATCH',  # Bypass STL version check
             '--expt-relaxed-constexpr',  # Allow constexpr extensions
             '--expt-extended-lambda',  # Allow extended lambda features
-            '-rdc=true',  # Enable relocatable device code for separate compilation
         ]
     else:
         cxx_flags = []
-        nvcc_flags = ['-DNVDR_TORCH', '--use_fast_math', '-rdc=true']
+        nvcc_flags = ['-DNVDR_TORCH', '--use_fast_math']
 
     extra_compile_args = {
         'cxx': cxx_flags,
@@ -122,7 +121,6 @@ if BUILD_BINARY:
         extra_link_args = [
             f'/LIBPATH:{lib_dir}',
             '/DEFAULTLIB:setgpu',
-            '/DEFAULTLIB:cudadevrt',  # Required for separate compilation with -rdc=true
         ]
 
     # Create the CUDA extension
