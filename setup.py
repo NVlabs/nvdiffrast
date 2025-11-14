@@ -104,10 +104,11 @@ if BUILD_BINARY:
             '-D_ALLOW_COMPILER_AND_STL_VERSION_MISMATCH',  # Bypass STL version check
             '--expt-relaxed-constexpr',  # Allow constexpr extensions
             '--expt-extended-lambda',  # Allow extended lambda features
+            '-rdc=true',  # Enable relocatable device code for separate compilation
         ]
     else:
         cxx_flags = []
-        nvcc_flags = ['-DNVDR_TORCH', '--use_fast_math']
+        nvcc_flags = ['-DNVDR_TORCH', '--use_fast_math', '-rdc=true']
 
     extra_compile_args = {
         'cxx': cxx_flags,
@@ -118,7 +119,11 @@ if BUILD_BINARY:
     extra_link_args = []
     if os.name == 'nt':
         lib_dir = os.path.join(nvdr_root, 'nvdiffrast', 'lib')
-        extra_link_args = [f'/LIBPATH:{lib_dir}', '/DEFAULTLIB:setgpu']
+        extra_link_args = [
+            f'/LIBPATH:{lib_dir}',
+            '/DEFAULTLIB:setgpu',
+            '/DEFAULTLIB:cudadevrt',  # Required for separate compilation with -rdc=true
+        ]
 
     # Create the CUDA extension
     ext_modules = [
