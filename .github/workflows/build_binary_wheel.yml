@@ -123,6 +123,13 @@ jobs:
           BUILD_BINARY_WHEEL: "1"
           TORCH_CUDA_ARCH_LIST: "6.0 6.1 7.0 7.5 8.0 8.6 8.9 9.0"
 
+      - name: Upload wheel artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nvdiffrast-binary-wheel-py311-cu118-win_amd64
+          path: dist/*.whl
+          retention-days: 30
+
       - name: Test wheel installation
         run: |
           Write-Host "=== Creating test environment ==="
@@ -145,13 +152,6 @@ jobs:
           Write-Host "`n=== Verifying pre-compiled plugin ==="
           python -c "import sys; import torch; import nvdiffrast_plugin; print('[OK] Pre-compiled plugin found:', nvdiffrast_plugin.__file__)"
         shell: powershell
-
-      - name: Upload wheel artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: nvdiffrast-binary-wheel-py311-cu118-win_amd64
-          path: dist/*.whl
-          retention-days: 30
 
       - name: Display build summary
         run: |
