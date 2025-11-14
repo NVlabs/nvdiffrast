@@ -92,6 +92,7 @@ if BUILD_BINARY:
         cxx_flags = [
             '/wd4067',  # Disable warning: unexpected tokens following preprocessor directive
             '/wd4624',  # Disable warning: destructor was implicitly defined as deleted
+            '/DNVDR_TORCH',  # Define NVDR_TORCH for C++ files (enables CUDA macros)
             '/D_ALLOW_COMPILER_AND_STL_VERSION_MISMATCH',  # Allow CUDA 11.8 with latest VS 2022
             '/D_SILENCE_ALL_CXX17_DEPRECATION_WARNINGS',  # Silence C++17 deprecation warnings
             '/bigobj',  # Support large object files (needed for CUDA compilation)
