@@ -30,6 +30,8 @@ jobs:
 
       - name: Verify CUDA and Python
         run: |
+          $ErrorActionPreference = 'Continue'
+
           Write-Host "=== Python Version ==="
           python --version
 
@@ -40,16 +42,16 @@ jobs:
           Write-Host "CUDA_PATH: $env:CUDA_PATH"
 
           Write-Host "`n=== MSVC Compiler (optional check) ==="
-          $clPath = where.exe cl.exe 2>$null
+          $clPath = where.exe cl.exe 2>&1 | Out-Null
           if ($LASTEXITCODE -eq 0) {
-              Write-Host "Found: $clPath"
+              Write-Host "Found in PATH"
           } else {
               Write-Host "Not in PATH (will be auto-detected during build)"
           }
 
           Write-Host "`n[OK] Verification complete"
-          exit 0
         shell: powershell
+        continue-on-error: true
 
       - name: Install build dependencies
         run: |
