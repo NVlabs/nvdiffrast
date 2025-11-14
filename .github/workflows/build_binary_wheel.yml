@@ -40,16 +40,15 @@ jobs:
           Write-Host "CUDA_PATH: $env:CUDA_PATH"
 
           Write-Host "`n=== MSVC Compiler (optional check) ==="
-          try {
-              $clPath = where.exe cl.exe 2>$null
-              if ($clPath) {
-                  Write-Host "Found: $clPath"
-              } else {
-                  Write-Host "Not in PATH (will be auto-detected during build)"
-              }
-          } catch {
+          $clPath = where.exe cl.exe 2>$null
+          if ($LASTEXITCODE -eq 0) {
+              Write-Host "Found: $clPath"
+          } else {
               Write-Host "Not in PATH (will be auto-detected during build)"
           }
+
+          Write-Host "`n[OK] Verification complete"
+          exit 0
         shell: powershell
 
       - name: Install build dependencies
