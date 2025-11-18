@@ -23,6 +23,21 @@ def _get_plugin(gl=False):
     if _cached_plugin.get(gl, None) is not None:
         return _cached_plugin[gl]
 
+    # Try to load pre-compiled extension first (for binary wheels)
+    try:
+        if gl:
+            import nvdiffrast_plugin_gl
+            _cached_plugin[gl] = nvdiffrast_plugin_gl
+        else:
+            import nvdiffrast_plugin
+            _cached_plugin[gl] = nvdiffrast_plugin
+
+        logging.getLogger('nvdiffrast').info("[OK] Loaded pre-compiled nvdiffrast plugin")
+        return _cached_plugin[gl]
+    except ImportError:
+        # Pre-compiled extension not found, fall back to JIT compilation
+        logging.getLogger('nvdiffrast').info("Pre-compiled plugin not found, using JIT compilation")
+
     # Make sure we can find the necessary compiler and libary binaries.
     if os.name == 'nt':
         lib_dir = os.path.dirname(__file__) + r"\..\lib"

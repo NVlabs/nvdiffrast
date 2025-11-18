@@ -1,0 +1,172 @@
+name: Build nvdiffrast Binary Wheel (Windows CUDA 12.4)
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:  # Allow manual trigger
+
+jobs:
+  build_windows_binary:
+    runs-on: windows-2022  # Has MSVC pre-installed
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install CUDA Toolkit 12.4
+        uses: Jimver/cuda-toolkit@v0.2.18
+        with:
+          cuda: '12.4.0'
+          method: 'network'
+          use-github-cache: false
+          use-local-cache: false
+
+      - name: Verify CUDA and Python
+        run: |
+          $ErrorActionPreference = 'Continue'
+
+          Write-Host "=== Python Version ==="
+          python --version
+
+          Write-Host "`n=== NVCC Version ==="
+          nvcc --version
+
+          Write-Host "`n=== CUDA Environment ==="
+          Write-Host "CUDA_PATH: $env:CUDA_PATH"
+
+          Write-Host "`n=== MSVC Compiler (optional check) ==="
+          $clPath = where.exe cl.exe 2>&1 | Out-Null
+          if ($LASTEXITCODE -eq 0) {
+              Write-Host "Found in PATH"
+          } else {
+              Write-Host "Not in PATH (will be auto-detected during build)"
+          }
+
+          Write-Host "`n[OK] Verification complete"
+        shell: powershell
+        continue-on-error: true
+
+      - name: Install build dependencies
+        run: |
+          pip install --upgrade pip
+          pip install wheel setuptools ninja
+        shell: powershell
+
+      - name: Install PyTorch 2.6.0 (CUDA 12.4)
+        run: |
+          pip install torch==2.6.0 torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cu124
+        shell: powershell
+
+      - name: Install NumPy 1.26.4
+        run: |
+          pip install numpy==1.26.4
+        shell: powershell
+
+      - name: Verify PyTorch CUDA
+        run: |
+          python -c "import torch; print(f'PyTorch: {torch.__version__}'); print(f'CUDA available: {torch.cuda.is_available()}'); print(f'CUDA version: {torch.version.cuda}')"
+        shell: powershell
+
+      - name: Build binary wheel
+        run: |
+          $ErrorActionPreference = 'Continue'
+
+          Write-Host "=== Setting up MSVC environment ==="
+          # Find and activate Visual Studio Developer environment
+          $vsPath = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath
+          Write-Host "Visual Studio path: $vsPath"
+
+          Import-Module "$vsPath\Common7\Tools\Microsoft.VisualStudio.DevShell.dll"
+          Enter-VsDevShell -VsInstallPath $vsPath -SkipAutomaticLocation -DevCmdArguments "-arch=x64 -host_arch=x64"
+
+          Write-Host "Verifying cl.exe is now in PATH:"
+          where.exe cl.exe
+
+          Write-Host "`n=== Building binary wheel with CUDA extensions ==="
+          $env:BUILD_BINARY_WHEEL = "1"
+          $env:TORCH_CUDA_ARCH_LIST = "6.0 6.1 7.0 7.5 8.0 8.6 8.9 9.0"
+          $env:DISTUTILS_USE_SDK = "1"
+          $env:MAX_JOBS = "2"
+
+          Write-Host "Build environment:"
+          Write-Host "  CUDA_PATH: $env:CUDA_PATH"
+          Write-Host "  BUILD_BINARY_WHEEL: $env:BUILD_BINARY_WHEEL"
+          Write-Host "  TORCH_CUDA_ARCH_LIST: $env:TORCH_CUDA_ARCH_LIST"
+          Write-Host "  MAX_JOBS: $env:MAX_JOBS"
+          Write-Host ""
+
+          python setup.py bdist_wheel > build.log 2>&1
+          $buildExitCode = $LASTEXITCODE
+
+          Write-Host "`n=== Build Output ==="
+          Get-Content build.log
+
+          if ($buildExitCode -ne 0) {
+              Write-Host "`n=== BUILD FAILED (exit code: $buildExitCode) ==="
+              exit $buildExitCode
+          }
+
+          Write-Host "`n=== Built wheel ==="
+          $wheels = Get-ChildItem dist\*.whl
+          foreach ($wheel in $wheels) {
+              Write-Host "  Wheel: $($wheel.Name)"
+              Write-Host "  Size: $([math]::Round($wheel.Length / 1MB, 2)) MB"
+          }
+        shell: powershell
+        env:
+          BUILD_BINARY_WHEEL: "1"
+          TORCH_CUDA_ARCH_LIST: "6.0 6.1 7.0 7.5 8.0 8.6 8.9 9.0"
+
+      - name: Upload wheel artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nvdiffrast-binary-wheel-py311-cu124-win_amd64
+          path: dist/*.whl
+          retention-days: 30
+
+      - name: Test wheel installation
+        run: |
+          Write-Host "=== Creating test environment ==="
+          python -m venv test_env
+          .\test_env\Scripts\Activate.ps1
+
+          Write-Host "`n=== Installing PyTorch in test env ==="
+          pip install torch==2.6.0 --extra-index-url https://download.pytorch.org/whl/cu124
+
+          Write-Host "`n=== Installing built wheel ==="
+          $wheel = Get-ChildItem dist\*.whl | Select-Object -First 1
+          pip install $wheel.FullName
+
+          Write-Host "`n=== Testing import ==="
+          python -c "import nvdiffrast.torch as dr; print('[OK] nvdiffrast imported successfully')"
+
+          Write-Host "`n=== Testing CUDA plugin load ==="
+          python -c "from nvdiffrast.torch import ops; plugin = ops._get_plugin(); print('[OK] CUDA plugin loaded successfully')"
+
+          Write-Host "`n=== Verifying pre-compiled plugin ==="
+          python -c "import sys; import torch; import nvdiffrast_plugin; print('[OK] Pre-compiled plugin found:', nvdiffrast_plugin.__file__)"
+        shell: powershell
+
+      - name: Display build summary
+        run: |
+          Write-Host "`n=========================================="
+          Write-Host "✅ BUILD SUCCESSFUL!"
+          Write-Host "=========================================="
+          Write-Host "`nBuilt wheel:"
+          Get-ChildItem dist\*.whl | ForEach-Object {
+              Write-Host "  📦 $($_.Name)"
+              Write-Host "     Size: $([math]::Round($_.Length / 1MB, 2)) MB"
+          }
+          Write-Host "`n📥 To download:"
+          Write-Host "  1. Go to Actions tab in GitHub"
+          Write-Host "  2. Click on this workflow run"
+          Write-Host "  3. Download artifact from 'Artifacts' section"
+          Write-Host "`n✨ This is a TRUE BINARY WHEEL (cp311-cp311-win_amd64)"
+          Write-Host "   No MSVC Build Tools required for installation!"
+        shell: powershell
