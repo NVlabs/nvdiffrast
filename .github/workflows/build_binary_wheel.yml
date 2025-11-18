@@ -1,4 +1,4 @@
-name: Build nvdiffrast Binary Wheel (Windows CUDA 11.8)
+name: Build nvdiffrast Binary Wheel (Windows CUDA 12.4)
 
 on:
   push:
@@ -19,10 +19,10 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install CUDA Toolkit 11.8
+      - name: Install CUDA Toolkit 12.4
         uses: Jimver/cuda-toolkit@v0.2.18
         with:
-          cuda: '11.8.0'
+          cuda: '12.4.0'
           method: 'network'
           use-github-cache: false
           use-local-cache: false
@@ -58,9 +58,9 @@ jobs:
           pip install wheel setuptools ninja
         shell: powershell
 
-      - name: Install PyTorch 2.2.2 (CUDA 11.8)
+      - name: Install PyTorch 2.6.0 (CUDA 12.4)
         run: |
-          pip install torch==2.2.2 torchvision==0.17.2 torchaudio==2.2.2 --extra-index-url https://download.pytorch.org/whl/cu118
+          pip install torch==2.6.0 torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cu124
         shell: powershell
 
       - name: Install NumPy 1.26.4
@@ -126,7 +126,7 @@ jobs:
       - name: Upload wheel artifact
         uses: actions/upload-artifact@v4
         with:
-          name: nvdiffrast-binary-wheel-py311-cu118-win_amd64
+          name: nvdiffrast-binary-wheel-py311-cu124-win_amd64
           path: dist/*.whl
           retention-days: 30
 
@@ -137,7 +137,7 @@ jobs:
           .\test_env\Scripts\Activate.ps1
 
           Write-Host "`n=== Installing PyTorch in test env ==="
-          pip install torch==2.2.2 --extra-index-url https://download.pytorch.org/whl/cu118
+          pip install torch==2.6.0 --extra-index-url https://download.pytorch.org/whl/cu124
 
           Write-Host "`n=== Installing built wheel ==="
           $wheel = Get-ChildItem dist\*.whl | Select-Object -First 1
