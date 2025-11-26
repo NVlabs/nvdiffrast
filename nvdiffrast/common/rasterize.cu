@@ -85,6 +85,9 @@ __global__ void RasterizeCudaFwdShaderKernel(const RasterizeCudaFwdShaderParams 
     // Clamps to avoid NaNs.
     b0 = __saturatef(b0); // Clamp to [+0.0, 1.0].
     b1 = __saturatef(b1); // Clamp to [+0.0, 1.0].
+    float bs = 1.f / fmaxf(b0 + b1, 1.f);
+    b0 *= bs; // Clamp sum to 1.0 diagonally.
+    b1 *= bs;
     zw = fmaxf(fminf(zw, 1.f), -1.f);
 
     // Emit output.
