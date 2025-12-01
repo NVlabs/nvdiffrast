@@ -3,13 +3,9 @@ include README.md
 include LICENSE.txt
 include pyproject.toml
 include setup.py
-include run_sample.sh
 
 # Include documentation
 recursive-include docs *
-
-# Include samples and data
-recursive-include samples *
 
 # Include CUDA/C++ sources and Python files in the source package.
 recursive-include nvdiffrast *.py
