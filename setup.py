@@ -49,7 +49,7 @@ setuptools.setup(
             extra_compile_args={
                 "cxx": ["-DNVDR_TORCH"]
                 # Disable warnings in torch headers.
-                + (["/wd4067", "/wd4624"] if os.name == "nt" else []),
+                + (["/wd4067", "/wd4624", "/wd4996"] if os.name == "nt" else []),
                 "nvcc": ["-DNVDR_TORCH", "-lineinfo"],
             },
         )
