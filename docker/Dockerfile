@@ -6,38 +6,15 @@
 # distribution of this software and related documentation without an express
 # license agreement from NVIDIA CORPORATION is strictly prohibited.
 
-# Note: Should also work with NVIDIA's Docker image builds such as
-#
-# nvcr.io/nvidia/pytorch:20.09-py3
-#
-# This file defaults to pytorch/pytorch as it works on slightly older
-# driver versions.
-FROM nvcr.io/nvidia/pytorch:23.03-py3
-
-RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-    pkg-config \
-    libglvnd0 \
-    libgl1 \
-    libglx0 \
-    libegl1 \
-    libgles2 \
-    libglvnd-dev \
-    libgl1-mesa-dev \
-    libegl1-mesa-dev \
-    libgles2-mesa-dev \
-    cmake \
-    curl
+# Note: you should be able to use a newer image here:
+FROM nvcr.io/nvidia/pytorch:25.06-py3
 
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
-# nvidia-container-runtime
-ENV NVIDIA_VISIBLE_DEVICES all
-ENV NVIDIA_DRIVER_CAPABILITIES compute,utility,graphics
-
-RUN pip install --upgrade pip
 RUN pip install ninja imageio imageio-ffmpeg
 
-COPY nvdiffrast /tmp/pip/nvdiffrast/
-COPY README.md setup.py /tmp/pip/
-RUN cd /tmp/pip && pip install .
+COPY csrc /tmp/nvdiffrast/csrc
+COPY nvdiffrast /tmp/nvdiffrast/nvdiffrast
+COPY *.py *.toml *.md *.txt /tmp/nvdiffrast
+RUN TORCH_CUDA_ARCH_LIST="8.0;8.6;8.9;9.0;10.0" pip install /tmp/nvdiffrast --no-build-isolation
