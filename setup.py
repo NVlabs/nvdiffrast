@@ -13,17 +13,14 @@ import os
 try:
     from torch.utils.cpp_extension import BuildExtension, CUDAExtension
 except ImportError:
-    # This happens if the user runs 'pip install .' (default build isolation)
+    # This happens if the user runs 'pip install' with default build isolation
     # OR if they simply don't have torch installed at all.
     print("\n\n" + "*" * 70)
-    print("ERROR: PyTorch is not installed in the build environment!")
-    print("To fix this, you have two options:\n")
-    print("1. Install PyTorch in your environment first, then run:")
-    print("   pip install . --no-build-isolation\n")
-    print("2. If you are building a wheel for distribution, ensure")
-    print("   PyTorch is installed in your build environment.")
+    print("ERROR! Cannot compile nvdiffrast CUDA extension. Please ensure that:\n")
+    print("1. You have PyTorch installed")
+    print("2. You run 'pip install' with --no-build-isolation flag")
     print("*" * 70 + "\n\n")
-    raise
+    exit(1)
 
 setuptools.setup(
     ext_modules=[

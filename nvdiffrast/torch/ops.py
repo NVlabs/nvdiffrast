@@ -8,6 +8,7 @@
 
 import numpy as np
 import torch
+import warnings
 import _nvdiffrast_c
 
 #----------------------------------------------------------------------------
@@ -66,6 +67,7 @@ class RasterizeCudaContext:
         self.cpp_wrapper = _nvdiffrast_c.RasterizeCRStateWrapper(cuda_device_idx)
         self.output_db = True
         self.active_depth_peeler = None
+
 
 #----------------------------------------------------------------------------
 # Rasterize.
@@ -547,5 +549,20 @@ def antialias_construct_topology_hash(tri):
     """
     assert isinstance(tri, torch.Tensor)
     return _nvdiffrast_c.antialias_construct_topology_hash(tri)
+
+#----------------------------------------------------------------------------
+# Legacy OpenGL context stub for backwards compatibility.
+#----------------------------------------------------------------------------
+
+class RasterizeGLContext(RasterizeCudaContext):
+    def __init__(self, output_db=True, mode='automatic', device=None):
+        warnings.warn("RasterizeGLContext has been deprecated and uses RasterizeCudaContext internally", DeprecationWarning, stacklevel=2)
+        super().__init__(device=device)
+
+    def set_context(self):
+        pass
+
+    def release_context(self):
+        pass
 
 #----------------------------------------------------------------------------
