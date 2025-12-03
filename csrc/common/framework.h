@@ -21,8 +21,6 @@
 #include <c10/cuda/CUDAGuard.h>
 #include <pybind11/numpy.h>
 #endif
-#define NVDR_CTX_ARGS int _nvdr_ctx_dummy
-#define NVDR_CTX_PARAMS 0
 #define NVDR_CHECK(COND, ERR) do { TORCH_CHECK(COND, ERR) } while(0)
 #define NVDR_CHECK_CUDA_ERROR(CUDA_CALL) do { cudaError_t err = CUDA_CALL; TORCH_CHECK(!err, "Cuda error: ", cudaGetLastError(), "[", #CUDA_CALL, ";]"); } while(0)
 #endif

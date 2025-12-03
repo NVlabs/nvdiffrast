@@ -65,7 +65,6 @@ class RasterizeCudaContext:
             with torch.cuda.device(device):
                 cuda_device_idx = torch.cuda.current_device()
         self.cpp_wrapper = _nvdiffrast_c.RasterizeCRStateWrapper(cuda_device_idx)
-        self.output_db = True
         self.active_depth_peeler = None
 
 
@@ -109,21 +108,16 @@ def rasterize(glctx, pos, tri, resolution, ranges=None, grad_db=True):
                 `torch.int32`, specifying start indices and counts into `tri`.
                 Ignored in instanced mode.
         grad_db: Propagate gradients of image-space derivatives of barycentrics
-                 into `pos` in backward pass. Ignored if using a rasterization context
-                 that was not configured to output image-space derivatives.
+                 into `pos` in backward pass.
 
     Returns:
-        A tuple of two tensors. The first output tensor has shape [minibatch_size,
-        height, width, 4] and contains the main rasterizer output in order (u, v, z/w,
-        triangle_id). If the rasterization context was configured to output image-space
-        derivatives of barycentrics, the second output tensor will also have shape
-        [minibatch_size, height, width, 4] and contain said derivatives in order
-        (du/dX, du/dY, dv/dX, dv/dY). Otherwise it will be an empty tensor with shape
-        [minibatch_size, height, width, 0].
+        A tuple of two tensors, both with shape [minibatch_size, height, width, 4].
+        The first output tensor contains the main rasterizer output in order
+        (u, v, z/w, triangle_id). The second output tensor contains image-space
+        derivatives of barycentrics in order (du/dX, du/dY, dv/dX, dv/dY).
     '''
     assert isinstance(glctx, RasterizeCudaContext)
     assert grad_db is True or grad_db is False
-    grad_db = grad_db and glctx.output_db
 
     # Sanitize inputs.
     assert isinstance(pos, torch.Tensor) and isinstance(tri, torch.Tensor)
@@ -155,7 +149,6 @@ class DepthPeeler:
         '''
         assert isinstance(glctx, RasterizeCudaContext)
         assert grad_db is True or grad_db is False
-        grad_db = grad_db and glctx.output_db
 
         # Sanitize inputs as usual.
         assert isinstance(pos, torch.Tensor) and isinstance(tri, torch.Tensor)

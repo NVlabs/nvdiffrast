@@ -12,7 +12,7 @@
 //------------------------------------------------------------------------
 // Mip stack construction and access helpers.
 
-void raiseMipSizeError(NVDR_CTX_ARGS, const TextureKernelParams& p)
+void raiseMipSizeError(const TextureKernelParams& p)
 {
     char buf[1024];
     int bufsz = 1024;
@@ -59,7 +59,7 @@ void raiseMipSizeError(NVDR_CTX_ARGS, const TextureKernelParams& p)
     NVDR_CHECK(0, msg);
 }
 
-int calculateMipInfo(NVDR_CTX_ARGS, TextureKernelParams& p, int* mipOffsets)
+int calculateMipInfo(TextureKernelParams& p, int* mipOffsets)
 {
     // No levels at all?
     if (p.mipLevelLimit == 0)
@@ -83,7 +83,7 @@ int calculateMipInfo(NVDR_CTX_ARGS, TextureKernelParams& p, int* mipOffsets)
 
         // Quit if cannot downsample.
         if ((w > 1 && (w & 1)) || (h > 1 && (h & 1)))
-            raiseMipSizeError(NVDR_CTX_PARAMS, p);
+            raiseMipSizeError(p);
 
         // Downsample.
         if (w > 1) w >>= 1;

@@ -129,7 +129,7 @@ TextureMipWrapper texture_construct_mip(torch::Tensor tex, int max_mip_level, bo
 
     // Generate mip offsets and calculate total size.
     int mipOffsets[TEX_MAX_MIP_LEVEL];
-    int mipTotal = calculateMipInfo(NVDR_CTX_PARAMS, p, mipOffsets);
+    int mipTotal = calculateMipInfo(p, mipOffsets);
 
     // Allocate and set mip tensor.
     torch::TensorOptions opts = torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCUDA);
@@ -305,7 +305,7 @@ torch::Tensor texture_fwd_mip(torch::Tensor tex, torch::Tensor uv, torch::Tensor
         {
             // Generate mip offsets, check mipmap size, and set mip data pointer.
             int mipOffsets[TEX_MAX_MIP_LEVEL];
-            int mipTotal = calculateMipInfo(NVDR_CTX_PARAMS, p, mipOffsets);
+            int mipTotal = calculateMipInfo(p, mipOffsets);
             NVDR_CHECK(tex.sizes() == mip_wrapper.texture_size && cube_mode == mip_wrapper.cube_mode, "mip does not match texture size");
             NVDR_CHECK(mip_w.sizes().size() == 1 && mip_w.size(0) == mipTotal, "wrapped mip tensor size mismatch");
             pmip = mip_w.data_ptr<float>();
@@ -591,7 +591,7 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, std::vect
         {
             // Generate mip offsets and get space for temporary mip gradients.
             int mipOffsets[TEX_MAX_MIP_LEVEL];
-            int mipTotal = calculateMipInfo(NVDR_CTX_PARAMS, p, mipOffsets);
+            int mipTotal = calculateMipInfo(p, mipOffsets);
             NVDR_CHECK(tex.sizes() == mip_wrapper.texture_size && cube_mode == mip_wrapper.cube_mode, "mip does not match texture size");
             NVDR_CHECK(mip_w.sizes().size() == 1 && mip_w.size(0) == mipTotal, "mip tensor size mismatch");
             grad_mip = torch::zeros_like(mip_w);

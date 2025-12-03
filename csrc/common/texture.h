@@ -67,8 +67,8 @@ struct TextureKernelParams
 //------------------------------------------------------------------------
 // C++ helper function prototypes.
 
-void raiseMipSizeError(NVDR_CTX_ARGS, const TextureKernelParams& p);
-int calculateMipInfo(NVDR_CTX_ARGS, TextureKernelParams& p, int* mipOffsets);
+void raiseMipSizeError(const TextureKernelParams& p);
+int calculateMipInfo(TextureKernelParams& p, int* mipOffsets);
 
 //------------------------------------------------------------------------
 // Macros.
