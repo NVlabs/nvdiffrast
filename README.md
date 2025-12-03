@@ -10,7 +10,7 @@ Nvdiffrast is a PyTorch library that provides high-performance primitive operati
 
 To install:
 ```
-pip install --no-build-isolation git+https://github.com/NVlabs/nvdiffrast.git
+pip install git+https://github.com/NVlabs/nvdiffrast.git --no-build-isolation
 ```
 
 See &#x261E;&#x261E; [nvdiffrast documentation](https://nvlabs.github.io/nvdiffrast) &#x261C;&#x261C; for more information.
