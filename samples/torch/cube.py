@@ -95,7 +95,7 @@ def fit_cube(max_iter          = 5000,
             r_rot = util.random_rotation_translation(0.25)
 
             # Smooth rotation for display.
-            a_rot = np.matmul(util.rotate_x(-0.4), util.rotate_y(ang))
+            a_rot = np.matmul(util.rotate_x(0.4), util.rotate_y(ang))
 
             # Modelview and modelview + projection matrices.
             proj  = util.projection(x=0.4)

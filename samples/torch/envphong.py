@@ -89,7 +89,7 @@ def fit_env_phong(max_iter          = 1000,
 
         # Smooth rotation for display.
         ang = ang + 0.01
-        a_rot = np.matmul(util.rotate_x(-0.4), util.rotate_y(ang))
+        a_rot = np.matmul(util.rotate_x(0.4), util.rotate_y(ang))
 
         # Modelview and modelview + projection matrices.
         proj  = util.projection(x=0.4, n=1.0, f=200.0)

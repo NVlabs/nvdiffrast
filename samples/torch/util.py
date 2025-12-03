@@ -27,10 +27,10 @@ def translate(x, y, z):
 
 def rotate_x(a):
     s, c = np.sin(a), np.cos(a)
-    return np.array([[1,  0, 0, 0],
-                     [0,  c, s, 0],
-                     [0, -s, c, 0],
-                     [0,  0, 0, 1]]).astype(np.float32)
+    return np.array([[1, 0,  0, 0],
+                     [0, c, -s, 0],
+                     [0, s,  c, 0],
+                     [0, 0,  0, 1]]).astype(np.float32)
 
 def rotate_y(a):
     s, c = np.sin(a), np.cos(a)

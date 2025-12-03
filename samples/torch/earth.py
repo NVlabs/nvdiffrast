@@ -101,7 +101,7 @@ def fit_earth(max_iter          = 20000,
         r_rot = util.random_rotation_translation(0.25)
 
         # Smooth rotation for display.
-        a_rot = np.matmul(util.rotate_x(-0.4), util.rotate_y(ang))
+        a_rot = np.matmul(util.rotate_x(0.4), util.rotate_y(ang))
         dist = np.random.uniform(0.0, 48.5)
 
         # Modelview and modelview + projection matrices.
