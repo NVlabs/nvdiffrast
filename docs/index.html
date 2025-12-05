@@ -305,8 +305,10 @@ div.image-parent {
 <li><a href="#overview" id="toc-overview">Overview</a></li>
 <li><a href="#installation" id="toc-installation">Installation</a>
 <ul>
-<li><a href="#linux" id="toc-linux">Linux</a></li>
-<li><a href="#windows" id="toc-windows">Windows</a></li>
+<li><a href="#install-directly-from-github" id="toc-install-directly-from-github">Install directly from GitHub</a></li>
+<li><a href="#install-from-source" id="toc-install-from-source">Install from source</a></li>
+<li><a href="#install-into-docker-container" id="toc-install-into-docker-container">Install into Docker container</a></li>
+<li><a href="#custom-install-on-linux" id="toc-custom-install-on-linux">Custom install on Linux</a></li>
 </ul></li>
 <li><a href="#primitive-operations" id="toc-primitive-operations">Primitive operations</a>
 <ul>
@@ -321,16 +323,8 @@ div.image-parent {
 <li><a href="#geometry-and-minibatches-range-mode-vs-instanced-mode" id="toc-geometry-and-minibatches-range-mode-vs-instanced-mode">Geometry and minibatches: Range mode vs Instanced mode</a></li>
 <li><a href="#image-space-derivatives" id="toc-image-space-derivatives">Image-space derivatives</a></li>
 <li><a href="#mipmaps-and-texture-dimensions" id="toc-mipmaps-and-texture-dimensions">Mipmaps and texture dimensions</a></li>
-<li><a href="#rasterizing-with-cuda-vs-opengl" id="toc-rasterizing-with-cuda-vs-opengl">Rasterizing with CUDA vs OpenGL</a></li>
-<li><a href="#running-on-multiple-gpus" id="toc-running-on-multiple-gpus">Running on multiple GPUs</a>
-<ul>
-<li><a href="#note-on-torch.nn.dataparallel" id="toc-note-on-torch.nn.dataparallel">Note on torch.nn.DataParallel</a></li>
-</ul></li>
+<li><a href="#running-on-multiple-gpus" id="toc-running-on-multiple-gpus">Running on multiple GPUs</a></li>
 <li><a href="#rendering-multiple-depth-layers" id="toc-rendering-multiple-depth-layers">Rendering multiple depth layers</a></li>
-<li><a href="#differences-between-pytorch-and-tensorflow" id="toc-differences-between-pytorch-and-tensorflow">Differences between PyTorch and TensorFlow</a>
-<ul>
-<li><a href="#manual-opengl-contexts-in-pytorch" id="toc-manual-opengl-contexts-in-pytorch">Manual OpenGL contexts in PyTorch</a></li>
-</ul></li>
 </ul></li>
 <li><a href="#samples" id="toc-samples">Samples</a>
 <ul>
@@ -348,7 +342,7 @@ div.image-parent {
 </nav></div>
 
 <h2 id="overview">Overview</h2>
-<p>Nvdiffrast is a PyTorch/TensorFlow library that provides high-performance primitive operations for rasterization-based differentiable rendering. It is a lower-level library compared to previous ones such as <a href="https://github.com/BachiLi/redner">redner</a>, <a href="https://github.com/ShichenLiu/SoftRas">SoftRas</a>, or <a href="https://github.com/facebookresearch/pytorch3d">PyTorch3D</a> — nvdiffrast has no built-in camera models, lighting/material models, etc. Instead, the provided operations encapsulate only the most graphics-centric steps in the modern hardware graphics pipeline: rasterization, interpolation, texturing, and antialiasing. All of these operations (and their gradients) are GPU-accelerated, either via CUDA or via the hardware graphics pipeline.</p>
+<p>Nvdiffrast is a PyTorch library that provides high-performance primitive operations for rasterization-based differentiable rendering. It is a lower-level library compared to previous ones such as <a href="https://github.com/BachiLi/redner">redner</a>, <a href="https://github.com/ShichenLiu/SoftRas">SoftRas</a>, or <a href="https://github.com/facebookresearch/pytorch3d">PyTorch3D</a> — nvdiffrast has no built-in camera models, lighting/material models, etc. Instead, the provided operations encapsulate only the most graphics-centric steps in the modern hardware graphics pipeline: rasterization, interpolation, texturing, and antialiasing. All of these operations (and their gradients) are GPU-accelerated using CUDA.</p>
 This documentation is intended to serve as a user's guide to nvdiffrast. For detailed discussion on the design principles, implementation details, and benchmarks, please see our paper:
 <blockquote>
 <strong>Modular Primitives for High-Performance Differentiable Rendering</strong><br> Samuli Laine, Janne Hellsten, Tero Karras, Yeongho Seol, Jaakko Lehtinen, Timo Aila<br> ACM Transactions on Graphics 39(6) (proc. SIGGRAPH Asia 2020)
@@ -360,41 +354,67 @@ This documentation is intended to serve as a user's guide to nvdiffrast. For det
 <img class="teaser" src="img/teaser4.png"/> <img class="teaser" src="img/teaser1.png"/> <img class="teaser" src="img/teaser2.png"/> <img class="teaser" src="img/teaser3.png"/> <img class="teaser" src="img/teaser5.png"/>
 </div>
 <div class="caption">
-Examples of things we've done with nvdiffrast
+Examples of optimization problems solved using nvdiffrast
 </div>
 </div>
 </div>
 <h2 id="installation">Installation</h2>
-<p>Minimum requirements:</p>
+<p>Recommended minimum requirements:</p>
 <ul>
-<li>Linux or Windows operating system.</li>
-<li>64-bit Python 3.6.</li>
-<li>PyTorch (recommended) 1.6 or TensorFlow 1.14. TensorFlow 2.x is currently not supported.</li>
-<li>A high-end NVIDIA GPU, NVIDIA drivers, CUDA 10.2 toolkit.</li>
+<li>Linux or Windows operating system</li>
+<li>Windows only: <a href="https://visualstudio.microsoft.com/visual-cpp-build-tools/">Visual Studio Build Tools for C++</a> from Microsoft
+<ul>
+<li>When installing, select "Desktop development with C++" workload</li>
+</ul></li>
+<li>64-bit Python 3.9 or later</li>
+<li><a href="https://pytorch.org/">PyTorch</a> 2.7 or later</li>
+<li>A high-end NVIDIA GPU with NVIDIA <a href="https://www.nvidia.com/drivers/">drivers</a></li>
+<li><a href="https://developer.nvidia.com/cuda-toolkit-archive">CUDA toolkit</a> version that matches your PyTorch installation</li>
 </ul>
-<p>To download nvdiffrast, either download the repository at <a href="https://github.com/NVlabs/nvdiffrast">https://github.com/NVlabs/nvdiffrast</a> as a .zip file, or clone the repository using git:</p>
-<div class="sourceCode" id="cb1"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="fu">git</span> clone https://github.com/NVlabs/nvdiffrast</span></code></pre></div>
-<h3 id="linux">Linux</h3>
-<p>We recommend running nvdiffrast on <a href="https://www.docker.com/">Docker</a>. To build a Docker image with nvdiffrast and PyTorch 1.6 installed, run:</p>
-<div class="sourceCode" id="cb2"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="ex">./run_sample.sh</span> <span class="at">--build-container</span></span></code></pre></div>
-<p>We recommend using Ubuntu, as some Linux distributions might not have all the required packages available. Installation on CentOS is reportedly problematic, but success has been claimed <a href="https://github.com/NVlabs/nvdiffrast/issues/48#issuecomment-1449261808">here</a>.</p>
-<p>To try out some of the provided code examples, run:</p>
-<div class="sourceCode" id="cb3"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="ex">./run_sample.sh</span> ./samples/torch/cube.py <span class="at">--resolution</span> 32</span></code></pre></div>
-<p>Alternatively, if you have all the dependencies taken care of (consult the included Dockerfile for reference), you can install nvdiffrast in your local Python site-packages by running</p>
-<div class="sourceCode" id="cb4"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="ex">pip</span> install .</span></code></pre></div>
-<p>at the root of the repository. You can also just add the repository root directory to your <code>PYTHONPATH</code>.</p>
-<h3 id="windows">Windows</h3>
-<p>On Windows, nvdiffrast requires an external compiler for compiling the CUDA kernels. The development was done using Microsoft Visual Studio 2017 Professional Edition, and this version works with both PyTorch and TensorFlow versions of nvdiffrast. VS 2019 Professional Edition has also been confirmed to work with the PyTorch version of nvdiffrast. Other VS editions besides Professional Edition, including the Community Edition, should work but have not been tested.</p>
-<p>If the compiler binary (<code>cl.exe</code>) cannot be found in <code>PATH</code>, nvdiffrast will search for it heuristically. If this fails you may need to add it manually via</p>
-<pre><code>&quot;C:\Program Files (x86)\Microsoft Visual Studio\...\...\VC\Auxiliary\Build\vcvars64.bat&quot;</code></pre>
-<p>where the exact path depends on the version and edition of VS you have installed.</p>
-<p>To install nvdiffrast in your local site-packages, run:</p>
-<div class="sourceCode" id="cb6"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Ninja is required run-time to build PyTorch extensions</span></span>
-<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a><span class="ex">pip</span> install ninja</span>
-<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a><span class="co"># Run at the root of the repository to install nvdiffrast</span></span>
-<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a><span class="ex">pip</span> install .</span></code></pre></div>
-<p>Instead of <code>pip install .</code> you can also just add the repository root directory to your <code>PYTHONPATH</code>.</p>
+<h3 id="install-directly-from-github">Install directly from GitHub</h3>
+<p>If you just want to use nvdiffrast, do this:</p>
+<div class="sourceCode" id="cb1"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="ex">pip</span> install setuptools wheel ninja</span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="ex">pip</span> install git+https://github.com/NVlabs/nvdiffrast.git <span class="at">--no-build-isolation</span></span></code></pre></div>
+<p><strong>Note 1</strong>: The <code>--no-build-isolation</code> flag is necessary. By default, pip creates a temporary, isolated environment to build packages, downloading fresh copies of dependencies. We disable this to ensure that the extension compiles against the PyTorch you have installed, preventing version mismatches and ABI incompatibility.</p>
+<p><strong>Note 2</strong>: If something goes wrong, additionally specify <code>-v</code> option in the pip command to get verbose output.</p>
+<h3 id="install-from-source">Install from source</h3>
+<p>If you want to download source code, samples and documentation locally, and possibly modify nvdiffrast before installing, this is the right option for you.</p>
+<p>To clone nvdiffrast from <a href="https://github.com/NVlabs/nvdiffrast" class="uri">https://github.com/NVlabs/nvdiffrast</a> and install, do:</p>
+<div class="sourceCode" id="cb2"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="fu">git</span> clone https://github.com/NVlabs/nvdiffrast</span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> nvdiffrast</span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="ex">pip</span> install setuptools wheel ninja</span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="ex">pip</span> install . <span class="at">--no-build-isolation</span></span></code></pre></div>
+<p>Instead of using Git, you can also download the repository as a .zip file, extract, and install as above.</p>
+<h3 id="install-into-docker-container">Install into Docker container</h3>
+<p>By default, CUDA PyTorch extensions are compiled to support the installed GPU(s) only. This is usually not the right choice when building a Docker container, so the Dockerfile should override this.</p>
+<p>We provide a minimal <a href="https://github.com/NVlabs/nvdiffrast/blob/main/Dockerfile">Dockerfile</a> to serve as an example of such installation. The key line is:</p>
+<div class="sourceCode" id="cb3"><pre class="sourceCode dockerfile"><code class="sourceCode dockerfile"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="kw">RUN</span> <span class="va">TORCH_CUDA_ARCH_LIST</span><span class="op">=</span><span class="st">&quot;8.0 8.6 8.9 9.0&quot;</span> <span class="ex">pip</span> install /tmp/nvdiffrast <span class="at">--no-build-isolation</span></span></code></pre></div>
+<p>This builds support for Ampere, Ada Lovelace, and Hopper hardware. Consult the resources below to determine which architecture versions you need to support in your cluster.</p>
+<ul>
+<li><a href="https://developer.nvidia.com/cuda-gpus" class="uri">https://developer.nvidia.com/cuda-gpus</a></li>
+<li><a href="https://docs.nvidia.com/cuda/cuda-compiler-driver-nvcc/index.html#gpu-feature-list" class="uri">https://docs.nvidia.com/cuda/cuda-compiler-driver-nvcc/index.html#gpu-feature-list</a></li>
+<li><a href="https://en.wikipedia.org/wiki/CUDA#GPUs_supported" class="uri">https://en.wikipedia.org/wiki/CUDA#GPUs_supported</a></li>
+</ul>
+<p>For full details on what PyTorch accepts in <code>TORCH_CUDA_ARCH_LIST</code>, see function <code>_get_cuda_arch_flags()</code> in PyTorch's <a href="https://github.com/pytorch/pytorch/blob/main/torch/utils/cpp_extension.py#:~:text=def%20_get_cuda_arch_flags"><code>cpp_extension.py</code></a>.</p>
+<h3 id="custom-install-on-linux">Custom install on Linux</h3>
+<p>If you do not want to upgrade your system's CUDA version globally, or want to point the installer to a specific local installation of the CUDA Toolkit, here is an example.</p>
+<div class="sourceCode" id="cb4"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> nvdiffrast</span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a><span class="co"># Install build dependencies</span></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a><span class="fu">sudo</span> apt install <span class="at">-y</span> build-essential</span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a><span class="co"># 1. Install CUDA SDK 12.8 locally (example)</span></span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a><span class="fu">wget</span> https://developer.download.nvidia.com/compute/cuda/12.8.0/local_installers/cuda_12.8.0_570.86.10_linux.run</span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a><span class="fu">sh</span> cuda_12.8.<span class="pp">*</span>_linux.run <span class="at">--silent</span> <span class="at">--toolkit</span> <span class="at">--toolkitpath</span><span class="op">=</span><span class="va">$HOME</span>/opt/cuda-12.8</span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a><span class="co"># 2. Add CUDA tools to PATH for this session</span></span>
+<span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a><span class="bu">export</span> <span class="va">PATH</span><span class="op">=</span><span class="va">$HOME</span>/opt/cuda-12.8/bin:<span class="va">$PATH</span></span>
+<span id="cb4-12"><a href="#cb4-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-13"><a href="#cb4-13" aria-hidden="true" tabindex="-1"></a><span class="co"># 3. Build and install nvdiffrast, also specify the compiler and architecture list explicitly</span></span>
+<span id="cb4-14"><a href="#cb4-14" aria-hidden="true" tabindex="-1"></a><span class="ex">pip</span> install setuptools wheel ninja</span>
+<span id="cb4-15"><a href="#cb4-15" aria-hidden="true" tabindex="-1"></a><span class="bu">export</span> <span class="va">CXX</span><span class="op">=</span>g++</span>
+<span id="cb4-16"><a href="#cb4-16" aria-hidden="true" tabindex="-1"></a><span class="bu">export</span> <span class="va">TORCH_CUDA_ARCH_LIST</span><span class="op">=</span><span class="st">&quot;8.0 8.6 8.9 9.0&quot;</span></span>
+<span id="cb4-17"><a href="#cb4-17" aria-hidden="true" tabindex="-1"></a><span class="ex">pip</span> install . <span class="at">--no-build-isolation</span></span></code></pre></div>
 <h2 id="primitive-operations">Primitive operations</h2>
 <p>Nvdiffrast offers four differentiable rendering primitives: <strong>rasterization</strong>, <strong>interpolation</strong>, <strong>texturing</strong>, and <strong>antialiasing</strong>. The operation of the primitives is described here in a platform-agnostic way. Platform-specific documentation can be found in the API reference section.</p>
 <p>In this section we ignore the minibatch axis for clarity and assume a minibatch size of one. However, all operations support minibatches as detailed later.</p>
@@ -456,13 +476,13 @@ Output of the texture sampling operation
 <div class="image-caption">
 <img class="brd" src="img/spot_texw.png"/>
 <div class="caption">
-Background replaced with white
+Background replaced with white (full code <a href="https://github.com/NVlabs/nvdiffrast/issues/195#issuecomment-2250277433">here</a>)
 </div>
 </div>
 </div>
 </div>
 <p>The middle image above shows the result of texture sampling using the interpolated texture coordinates from the previous step. Why is the background pink? The texture coordinates <span class="math inline">(<em>s</em>, <em>t</em>)</span> read as zero at those pixels, but that is a perfectly valid point to sample the texture. It happens that Spot's texture (left) has pink color at its <span class="math inline">(0, 0)</span> corner, and therefore all pixels in the background obtain that color as a result of the texture sampling operation. On the right, we have replaced the color of the <q>empty</q> pixels with a white color. Here's one way to do this in PyTorch:</p>
-<div class="sourceCode" id="cb7"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>img_right <span class="op">=</span> torch.where(rast_out[..., <span class="dv">3</span>:] <span class="op">&gt;</span> <span class="dv">0</span>, img_left, torch.tensor(<span class="fl">1.0</span>).cuda())</span></code></pre></div>
+<div class="sourceCode" id="cb5"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>img_right <span class="op">=</span> torch.where(rast_out[..., <span class="dv">3</span>:] <span class="op">&gt;</span> <span class="dv">0</span>, img_left, torch.tensor(<span class="fl">1.0</span>).cuda())</span></code></pre></div>
 <p>where <code>rast_out</code> is the output of the rasterization operation. We simply test if the <span class="math inline"><em>t</em><em>r</em><em>i</em><em>a</em><em>n</em><em>g</em><em>l</em><em>e</em>_<em>i</em><em>d</em></span> field, i.e., channel 3 of the rasterizer output, is greater than zero, indicating that a triangle was rendered in that pixel. If so, we take the color from the textured image, and otherwise we take constant 1.0.</p>
 <h3 id="antialiasing">Antialiasing</h3>
 <p>The last of the four primitive operations in nvdiffrast is antialiasing. Based on the geometry input (vertex positions and triangles), it will smooth out discontinuties at silhouette edges in a given image. The smoothing is based on a local approximation of coverage — an approximate integral over a pixel is calculated based on the exact location of relevant edges and the point-sampled colors at pixel centers.</p>
@@ -735,22 +755,8 @@ Mip level 5
 <p>Scaling the atlas to, say, 256×32 pixels would feel silly because the dimensions of the sub-images are perfectly fine, and downsampling the different sub-images together — which would happen after the 5×1 resolution — would not make sense anyway. For this reason, the texture sampling operation allows the user to specify the maximum number of mipmap levels to be constructed and used. In this case, setting <code>max_mip_level=5</code> would stop at the 5×1 mipmap and prevent the error.</p>
 <p>It is a deliberate design choice that nvdiffrast doesn't just stop automatically at a mipmap size it cannot downsample, but requires the user to specify a limit when the texture dimensions are not powers of two. The goal is to avoid bugs where prefiltered texture sampling mysteriously doesn't work due to an oddly sized texture. It would be confusing if a 256×256 texture gave beautifully prefiltered texture samples, a 255×255 texture suddenly had no prefiltering at all, and a 254×254 texture did just a bit of prefiltering (one level) but not more.</p>
 <p>If you compute your own mipmaps, their sizes must follow the scheme described above. There is no need to specify mipmaps all the way to 1×1 resolution, but the stack can end at any point and it will work equivalently to an internally constructed mipmap stack with a <code>max_mip_level</code> limit. Importantly, the gradients of user-provided mipmaps are not propagated automatically to the base texture — naturally so, because nvdiffrast knows nothing about the relation between them. Instead, the tensors that specify the mip levels in a user-provided mipmap stack will receive gradients of their own.</p>
-<h3 id="rasterizing-with-cuda-vs-opengl">Rasterizing with CUDA vs OpenGL</h3>
-<p>Since version 0.3.0, nvdiffrast on PyTorch supports executing the rasterization operation using either CUDA or OpenGL. Earlier versions and the Tensorflow bindings support OpenGL only.</p>
-<p>When rasterization is executed on OpenGL, we use the GPU's graphics pipeline to determine which triangles land on which pixels. GPUs have amazingly efficient hardware for doing this — it is their original <i>raison d'être</i> — and thus it makes sense to exploit it. Unfortunately, some computing environments haven't been designed with this in mind, and it can be difficult to get OpenGL to work correctly and interoperate with CUDA cleanly. On Windows, compatibility is generally good because the GPU drivers required to run CUDA also include OpenGL support. Linux is more complicated, as various drivers can be installed separately and there isn't a standardized way to acquire access to the hardware graphics pipeline.</p>
-<p>Rasterizing in CUDA pretty much reverses these considerations. Compatibility is obviously not an issue on any CUDA-enabled platform. On the other hand, implementing the rasterization process correctly and efficiently on a massively data-parallel programming model is non-trivial. The CUDA rasterizer in nvdiffrast follows the approach described in research paper <em>High-Performance Software Rasterization on GPUs</em> by Laine and Karras, HPG 2011. Our code is based on the paper's publicly released CUDA kernels, with considerable modifications to support current hardware architectures and to match nvdiffrast's needs.</p>
-<p>The subpixel precision of the CUDA rasterizer is limited to 4 bits, and depth peeling is less accurate than with OpenGL. Memory consumption depends on many factors. <em>Note:</em> Restrictions related to output resolution have been removed in version 0.3.3. Although the internal resolution of the CUDA rasterizer remains capped at 2048×2048, nvdiffrast now invokes it automatically multiple times to support higher resolutions.</p>
-<p>It is difficult to predict which rasterizer offers better performance. For complex meshes and high resolutions OpenGL will most likely outperform the CUDA rasterizer, although it has certain overheads that the CUDA rasterizer does not have. For simple meshes and low resolutions the CUDA rasterizer may be faster, but it has its own overheads, too. Measuring the performance on actual data, on the target platform, and in the context of the entire program is the only way to know for sure.</p>
-<p>To run rasterization in CUDA, create a <code>RasterizeCudaContext</code> and supply it to the <code>rasterize()</code> operation. For OpenGL, use a <code>RasterizeGLContext</code> instead. Easy!</p>
 <h3 id="running-on-multiple-gpus">Running on multiple GPUs</h3>
-<p>Nvdiffrast supports computation on multiple GPUs in both PyTorch and TensorFlow. As is the convention in PyTorch, the operations are always executed on the device on which the input tensors reside. All GPU input tensors must reside on the same device, and the output tensors will unsurprisingly end up on that same device. In addition, the rasterization operation requires that its context was created for the correct device. In TensorFlow, the rasterizer context is automatically created on the device of the rasterization operation when it is executed for the first time.</p>
-<p><i>The remainder of this section applies only to OpenGL rasterizer contexts. CUDA rasterizer contexts require no special considerations besides making sure they're on the correct device.</i></p>
-<p>On Windows, nvdiffrast implements OpenGL device selection in a way that can be done only once per process — after one context is created, all future ones will end up on the same GPU. Hence you cannot expect to run the rasterization operation on multiple GPUs within the same process using an OpenGL context. Trying to do so will either cause a crash or incur a significant performance penalty. However, with PyTorch it is common to distribute computation across GPUs by launching a separate process for each GPU, so this is not a huge concern. Note that any OpenGL context created within the same process, even for something like a GUI window, will prevent changing the device later. Therefore, if you want to run the rasterization operation on other than the default GPU, be sure to create its OpenGL context before initializing any other OpenGL-powered libraries.</p>
-<p>On Linux everything just works, and you can create OpenGL rasterizer contexts on multiple devices within the same process.</p>
-<h4 id="note-on-torch.nn.dataparallel">Note on torch.nn.DataParallel</h4>
-<p>PyTorch offers <code>torch.nn.DataParallel</code> wrapper class for splitting the execution of a minibatch across multiple threads. Unfortunately, this class is fundamentally incompatible with OpenGL-dependent operations, as it spawns a new set of threads at each call (as of PyTorch 1.9.0, at least). Using previously created OpenGL contexts in these new threads, even if taking care to not use the same context in multiple threads, causes them to be migrated around and this has resulted in ever-growing GPU memory usage and abysmal GPU utilization. Therefore, we advise against using <code>torch.nn.DataParallel</code> for rasterization operations that depend on the OpenGL contexts.</p>
-<p>Notably, <code>torch.nn.DistributedDataParallel</code> spawns subprocesses that are much more persistent. The subprocesses must create their own OpenGL contexts as part of initialization, and as such they do not suffer from this problem.</p>
-<p>GitHub issue <a href="https://github.com/NVlabs/nvdiffrast/issues/23">#23</a>, especially <a href="https://github.com/NVlabs/nvdiffrast/issues/23#issuecomment-851577382">this comment</a>, contains further analysis and suggestions for workarounds.</p>
+<p>Nvdiffrast supports computation on multiple GPUs. As is the convention in PyTorch, the operations are always executed on the device on which the input tensors reside. All GPU input tensors must reside on the same device, and the output tensors will unsurprisingly end up on that same device. In addition, the rasterization operation requires that its context was created for the correct device.</p>
 <h3 id="rendering-multiple-depth-layers">Rendering multiple depth layers</h3>
 <p>Sometimes there is a need to render scenes with partially transparent surfaces. In this case, it is not sufficient to find only the surfaces that are closest to the camera, as you may also need to know what lies behind them. For this purpose, nvdiffrast supports <em>depth peeling</em> that lets you extract multiple closest surfaces for each pixel.</p>
 <p>With depth peeling, we start by rasterizing the closest surfaces as usual. We then perform a second rasterization pass with the same geometry, but this time we cull all previously rendered surface points at each pixel, effectively extracting the second-closest depth layer. This can be repeated as many times as desired, so that we can extract as many depth layers as we like. See the images below for example results of depth peeling with each depth layer shaded and antialiased.</p>
@@ -777,34 +783,19 @@ Third depth layer
 </div>
 </div>
 <p>The API for depth peeling is based on <code>DepthPeeler</code> object that acts as a <a href="https://docs.python.org/3/reference/datamodel.html#context-managers">context manager</a>, and its <code>rasterize_next_layer</code> method. The first call to <code>rasterize_next_layer</code> is equivalent to calling the traditional <code>rasterize</code> function, and subsequent calls report further depth layers. The arguments for rasterization are specified when instantiating the <code>DepthPeeler</code> object. Concretely, your code might look something like this:</p>
-<div class="sourceCode" id="cb8"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="cf">with</span> nvdiffrast.torch.DepthPeeler(glctx, pos, tri, resolution) <span class="im">as</span> peeler:</span>
-<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>  <span class="cf">for</span> i <span class="kw">in</span> <span class="bu">range</span>(num_layers):</span>
-<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>    rast, rast_db <span class="op">=</span> peeler.rasterize_next_layer()</span>
-<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a>    (process <span class="kw">or</span> store the results)</span></code></pre></div>
+<div class="sourceCode" id="cb6"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="cf">with</span> nvdiffrast.torch.DepthPeeler(glctx, pos, tri, resolution) <span class="im">as</span> peeler:</span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>  <span class="cf">for</span> i <span class="kw">in</span> <span class="bu">range</span>(num_layers):</span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>    rast, rast_db <span class="op">=</span> peeler.rasterize_next_layer()</span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a>    (process <span class="kw">or</span> store the results)</span></code></pre></div>
 <p>There is no performance penalty compared to the basic rasterization op if you end up extracting only the first depth layer. In other words, the code above with <code>num_layers=1</code> runs exactly as fast as calling <code>rasterize</code> once.</p>
 <p>Depth peeling is only supported in the PyTorch version of nvdiffrast. For implementation reasons, depth peeling reserves the rasterizer context so that other rasterization operations cannot be performed while the peeling is ongoing, i.e., inside the <code>with</code> block. Hence you cannot start a nested depth peeling operation or call <code>rasterize</code> inside the <code>with</code> block unless you use a different context.</p>
 <p>For the sake of completeness, let us note the following small caveat: Depth peeling relies on depth values to distinguish surface points from each other. Therefore, culling "previously rendered surface points" actually means culling all surface points at the same or closer depth as those rendered into the pixel in previous passes. This matters only if you have multiple layers of geometry at matching depths — if your geometry consists of, say, nothing but two exactly overlapping triangles, you will see one of them in the first pass but never see the other one in subsequent passes, as it's at the exact depth that is already considered done.</p>
-<h3 id="differences-between-pytorch-and-tensorflow">Differences between PyTorch and TensorFlow</h3>
-<p>Nvdiffrast can be used from PyTorch and from TensorFlow 1.x; the latter may change to TensorFlow 2.x if there is demand. These frameworks operate somewhat differently and that is reflected in the respective APIs. Simplifying a bit, in TensorFlow 1.x you construct a persistent graph out of persistent nodes, and run many batches of data through it. In PyTorch, there is no persistent graph or nodes, but a new, ephemeral graph is constructed for each batch of data and destroyed immediately afterwards. Therefore, there is also no persistent state for the operations. There is the <code>torch.nn.Module</code> abstraction for festooning operations with persistent state, but we do not use it.</p>
-<p>As a consequence, things that would be part of persistent state of an nvdiffrast operation in TensorFlow must be stored by the user in PyTorch, and supplied to the operations as needed. In practice, this is a very small difference and amounts to just a couple of lines of code in most cases.</p>
-<p>As an example, consider the OpenGL context used by the rasterization operation. In order to use hardware-accelerated rendering, an OpenGL context must be created and switched into before issuing OpenGL commands internally. Creating the context is an expensive operation, so we don't want to create and destroy one at every call of the rasterization operation. In TensorFlow, the rasterization operation creates a context when it is executed for the first time, and stashes it away in its persistent state to be reused later. In PyTorch, the user has to create the context using a separate function call, and supply it as a parameter to the rasterization operation.</p>
-<p>Similarly, if you have a constant texture and want to use prefiltered texture sampling modes, the mipmap stack only needs to be computed once. In TensorFlow, you can specify that the texture is constant, in which case the texture sampling operation only computes the mipmap stack on the first execution and stores it internally. In PyTorch, you can compute the mipmap stack once using a separate function call, and supply it to the texture sampling operation every time. If you don't do that, the operation will compute the mipmap stack internally and discard it afterwards. This is exactly what you want if your texture changes at every iteration, and it's not wrong even if the texture is constant, just a bit inefficient.</p>
-<p>Finally, the same holds for a thing called the <em>topology hash</em> that the antialiasing operation uses for identifying potential silhouette edges. Its contents depend only on the triangle tensor, not the vertex positions, so if the topology is constant, this auxiliary structure needs to be constructed only once. As before, in TensorFlow this is handled internally, whereas in PyTorch a separate function is provided for <q>off-line</q> construction.</p>
-<h4 id="manual-opengl-contexts-in-pytorch">Manual OpenGL contexts in PyTorch</h4>
-<p>First, please note that handling OpenGL contexts manually is a very small optimization. It almost certainly won't be relevant unless you've already profiled and optimized your code <em>with gusto</em>, and you're on a mission to extract every last bit of performance possible.</p>
-<p>In TensorFlow, the only option is to let nvdiffrast handle the OpenGL context management internally. This is because TensorFlow utilizes multiple CPU threads under the hood, and the active OpenGL context is a thread-local resource.</p>
-<p>PyTorch isn't as unpredictable, and stays in the same CPU thread by default (although things like <code>torch.utils.data.DataLoader</code> do invoke additional CPU threads). As such, nvdiffrast lets the user choose between handling OpenGL context switching in <strong>automatic</strong> or <strong>manual</strong> mode. The default is automatic mode where the rasterization operation always sets/releases the context at the beginning/end of each execution, like we do in TensorFlow. This ensures that the rasterizer will always use the context that you supply, and the context won't remain active so nobody else can mess with it.</p>
-<p>In manual mode, the user assumes the responsibility of setting and releasing the OpenGL context. Most of the time, if you don't have any other libraries that would be using OpenGL, you can just set the context once after having created it and keep it set until the program exits. However, keep in mind that the active OpenGL context is a thread-local resource, so it needs to be set in the same CPU thread as it will be used, and it cannot be set simultaneously in multiple CPU threads.</p>
 <h2 id="samples">Samples</h2>
-<p>Nvdiffrast comes with a set of samples that were crafted to support the research paper. Each sample is available in both PyTorch and TensorFlow versions. Details such as command-line parameters, logging format, etc., may not be identical between the versions, and generally the PyTorch versions should be considered definitive. The command-line examples below are for the PyTorch versions.</p>
-<p>All PyTorch samples support selecting between CUDA and OpenGL rasterizer contexts. The default is to do rasterization in CUDA, and switching to OpenGL is done by specifying command-line option <code>--opengl</code>.</p>
-<p>Enabling interactive display using the <code>--display-interval</code> parameter is likely to fail on Linux when using OpenGL rasterization. This is because the interactive display window is shown using OpenGL, and on Linux this conflicts with the internal OpenGL rasterization in nvdiffrast. Using a CUDA context should work, assuming that OpenGL is correctly installed in the system (for displaying the window). Our Dockerfile is set up to support headless rendering only, and thus cannot show an interactive result window.</p>
+<p>Nvdiffrast comes with a set of samples that were crafted to support the research paper.</p>
 <h3 id="triangle.py"><a href="https://github.com/NVlabs/nvdiffrast/blob/main/samples/torch/triangle.py">triangle.py</a></h3>
-<p>This is a minimal sample that renders a triangle and saves the resulting image into a file (<code>tri.png</code>) in the current directory. Running this should be the first step to verify that you have everything set up correctly. Rendering is done using the rasterization and interpolation operations, so getting the correct output image means that both OpenGL (if specified on command line) and CUDA are working as intended under the hood.</p>
-<p>This is the only sample where you must specify either <code>--cuda</code> or <code>--opengl</code> on command line. Other samples default to CUDA rasterization and provide only the <code>--opengl</code> option.</p>
-<p>Example command lines:</p>
-<pre><code>python triangle.py --cuda
-python triangle.py --opengl</code></pre>
+<p>This is a minimal sample that renders a triangle and saves the resulting image into a file (<code>tri.png</code>) in the current directory. Running this should be the first step to verify that you have everything set up correctly. Rendering is done using the rasterization and interpolation operations, so getting the correct output image means that the CUDA parts are working as intended under the hood.</p>
+<p>Example command line:</p>
+<pre><code>python triangle.py</code></pre>
 <div class="image-parent">
 <div class="image-row">
 <div class="image-caption">
@@ -919,36 +910,18 @@ destroyed.</p><div class="arguments">Arguments:</div><table class="args"><tr cla
 <code>torch.device</code>, string (e.g., <code>'cuda:1'</code>), or int. If not
 specified, context will be created on currently active Cuda
 device.</td></tr></table><div class="returns">Returns:<div class="return_description">The newly created Cuda rasterizer context.</div></div></div>
-<div class="apifunc"><h4><code>nvdiffrast.torch.RasterizeGLContext(<em>output_db</em>=<span class="defarg">True</span>, <em>mode</em>=<span class="defarg">'automatic'</span>, <em>device</em>=<span class="defarg">None</span>)</code>&nbsp;<span class="sym_class">Class</span></h4>
-<p class="shortdesc">Create a new OpenGL rasterizer context.</p><p class="longdesc">Creating an OpenGL context is a slow operation so you should usually reuse the same
-context in all calls to <code>rasterize()</code> on the same CPU thread. The OpenGL context
-is deleted when the object is destroyed.</p><p class="longdesc">Side note: When using the OpenGL context in a rasterization operation, the
-context's internal framebuffer object is automatically enlarged to accommodate the
-rasterization operation's output shape, but it is never shrunk in size until the
-context is destroyed. Thus, if you need to rasterize, say, deep low-resolution
-tensors and also shallow high-resolution tensors, you can conserve GPU memory by
-creating two separate OpenGL contexts for these tasks. In this scenario, using the
-same OpenGL context for both tasks would end up reserving GPU memory for a deep,
-high-resolution output tensor.</p><div class="arguments">Arguments:</div><table class="args"><tr class="arg"><td class="argname">output_db</td><td class="arg_short">Compute and output image-space derivates of barycentrics.</td></tr><tr class="arg"><td class="argname">mode</td><td class="arg_short">OpenGL context handling mode. Valid values are 'manual' and 'automatic'.</td></tr><tr class="arg"><td class="argname">device</td><td class="arg_short">Cuda device on which the context is created. Type can be
-<code>torch.device</code>, string (e.g., <code>'cuda:1'</code>), or int. If not
-specified, context will be created on currently active Cuda
-device.</td></tr></table><div class="methods">Methods, only available if context was created in manual mode:</div><table class="args"><tr class="arg"><td class="argname">set_context()</td><td class="arg_short">Set (activate) OpenGL context in the current CPU thread.</td></tr><tr class="arg"><td class="argname">release_context()</td><td class="arg_short">Release (deactivate) currently active OpenGL context.</td></tr></table><div class="returns">Returns:<div class="return_description">The newly created OpenGL rasterizer context.</div></div></div>
 <div class="apifunc"><h4><code>nvdiffrast.torch.rasterize(<em>glctx</em>, <em>pos</em>, <em>tri</em>, <em>resolution</em>, <em>ranges</em>=<span class="defarg">None</span>, <em>grad_db</em>=<span class="defarg">True</span>)</code>&nbsp;<span class="sym_function">Function</span></h4>
 <p class="shortdesc">Rasterize triangles.</p><p class="longdesc">All input tensors must be contiguous and reside in GPU memory except for
 the <code>ranges</code> tensor that, if specified, has to reside in CPU memory. The
-output tensors will be contiguous and reside in GPU memory.</p><div class="arguments">Arguments:</div><table class="args"><tr class="arg"><td class="argname">glctx</td><td class="arg_short">Rasterizer context of type <code>RasterizeGLContext</code> or <code>RasterizeCudaContext</code>.</td></tr><tr class="arg"><td class="argname">pos</td><td class="arg_short">Vertex position tensor with dtype <code>torch.float32</code>. To enable range
+output tensors will be contiguous and reside in GPU memory.</p><div class="arguments">Arguments:</div><table class="args"><tr class="arg"><td class="argname">glctx</td><td class="arg_short">Rasterizer context of type <code>RasterizeCudaContext</code>.</td></tr><tr class="arg"><td class="argname">pos</td><td class="arg_short">Vertex position tensor with dtype <code>torch.float32</code>. To enable range
 mode, this tensor should have a 2D shape [num_vertices, 4]. To enable
 instanced mode, use a 3D shape [minibatch_size, num_vertices, 4].</td></tr><tr class="arg"><td class="argname">tri</td><td class="arg_short">Triangle tensor with shape [num_triangles, 3] and dtype <code>torch.int32</code>.</td></tr><tr class="arg"><td class="argname">resolution</td><td class="arg_short">Output resolution as integer tuple (height, width).</td></tr><tr class="arg"><td class="argname">ranges</td><td class="arg_short">In range mode, tensor with shape [minibatch_size, 2] and dtype
 <code>torch.int32</code>, specifying start indices and counts into <code>tri</code>.
 Ignored in instanced mode.</td></tr><tr class="arg"><td class="argname">grad_db</td><td class="arg_short">Propagate gradients of image-space derivatives of barycentrics
-into <code>pos</code> in backward pass. Ignored if using an OpenGL context that
-was not configured to output image-space derivatives.</td></tr></table><div class="returns">Returns:<div class="return_description">A tuple of two tensors. The first output tensor has shape [minibatch_size,
-height, width, 4] and contains the main rasterizer output in order (u, v, z/w,
-triangle_id). If the OpenGL context was configured to output image-space
-derivatives of barycentrics, the second output tensor will also have shape
-[minibatch_size, height, width, 4] and contain said derivatives in order
-(du/dX, du/dY, dv/dX, dv/dY). Otherwise it will be an empty tensor with shape
-[minibatch_size, height, width, 0].</div></div></div>
+into <code>pos</code> in backward pass.</td></tr></table><div class="returns">Returns:<div class="return_description">A tuple of two tensors, both with shape [minibatch_size, height, width, 4].
+The first output tensor contains the main rasterizer output in order
+(u, v, z/w, triangle_id). The second output tensor contains image-space
+derivatives of barycentrics in order (du/dX, du/dY, dv/dX, dv/dY).</div></div></div>
 <div class="apifunc"><h4><code>nvdiffrast.torch.DepthPeeler(<em>...</em>)</code>&nbsp;<span class="sym_class">Class</span></h4>
 <p class="shortdesc">Create a depth peeler object for rasterizing multiple depth layers.</p><p class="longdesc">Arguments are the same as in <code>rasterize()</code>.</p><div class="returns">Returns:<div class="return_description">The newly created depth peeler.</div></div></div>
 <div class="apifunc"><h4><code>nvdiffrast.torch.DepthPeeler.rasterize_next_layer()</code>&nbsp;<span class="sym_method">Method</span></h4>
@@ -1036,7 +1009,7 @@ severity will be silent.</td></tr></table></div>
 
 </div>
 <h2 id="licenses">Licenses</h2>
-<p>Copyright © 2020–2024, NVIDIA Corporation. All rights reserved.</p>
+<p>Copyright © 2020–2025, NVIDIA Corporation. All rights reserved.</p>
 <p>This work is made available under the <a href="https://github.com/NVlabs/nvdiffrast/blob/main/LICENSE.txt">Nvidia Source Code License</a>.</p>
 <p>For business inquiries, please visit our website and submit the form: <a href="https://www.nvidia.com/en-us/research/inquiries/">NVIDIA Research Licensing</a></p>
 <p>We do not currently accept outside contributions in the form of pull requests.</p>
