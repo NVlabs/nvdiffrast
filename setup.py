@@ -23,6 +23,17 @@ except ImportError:
     exit(1)
 
 setuptools.setup(
+    name="nvdiffrast",
+    version="0.4.0",
+    description="nvdiffrast - modular primitives for high-performance differentiable rendering",
+    long_description=open("README.md", encoding="utf-8").read() if os.path.exists("README.md") else "",
+    long_description_content_type="text/markdown",
+    author="Samuli Laine",
+    author_email="slaine@nvidia.com",
+    url="https://github.com/NVlabs/nvdiffrast",
+    packages=setuptools.find_packages(include=["nvdiffrast", "nvdiffrast.*"]),
+    python_requires=">=3.6",
+    install_requires=["numpy"],
     ext_modules=[
         CUDAExtension(
             "_nvdiffrast_c",
