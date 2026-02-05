@@ -44,10 +44,10 @@ setuptools.setup(
                 "csrc/torch/torch_texture.cpp",
             ],
             extra_compile_args={
-                "cxx": ["-DNVDR_TORCH"]
+                "cxx": ["-DNVDR_TORCH","-DGLOG_USE_GLOG_EXPORT"]
                 # Disable warnings in torch headers.
                 + (["/wd4067", "/wd4624", "/wd4996"] if os.name == "nt" else []),
-                "nvcc": ["-DNVDR_TORCH", "-lineinfo"],
+                "nvcc": ["-DNVDR_TORCH", "-lineinfo", "-DGLOG_USE_GLOG_EXPORT"],
             },
         )
     ],
