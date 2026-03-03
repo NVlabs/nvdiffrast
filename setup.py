@@ -8,10 +8,13 @@
 
 import setuptools
 import os
+import logging
+import subprocess
 
 # Print an error message if there's no PyTorch installed.
 try:
-    from torch.utils.cpp_extension import BuildExtension, CUDAExtension
+    import torch
+    from torch.utils.cpp_extension import BuildExtension, CUDAExtension, CUDA_HOME
 except ImportError:
     # This happens if the user runs 'pip install' with default build isolation
     # OR if they simply don't have torch installed at all.
@@ -21,6 +24,47 @@ except ImportError:
     print("2. You run 'pip install' with --no-build-isolation flag")
     print("*" * 70 + "\n\n")
     exit(1)
+
+def get_cuda_bare_metal_version(cuda_dir):
+    """Get CUDA version from nvcc."""
+    raw_output = subprocess.check_output([cuda_dir + "/bin/nvcc", "-V"], universal_newlines=True)
+    output = raw_output.split()
+    release_idx = output.index("release") + 1
+    release = output[release_idx].split(".")
+    return raw_output, release[0], release[1][0]
+
+# Handle CUDA availability
+if not torch.cuda.is_available() and os.getenv('NVDIFFRAST_CROSS_COMPILE_ALL', '0') == '1':
+    logging.warning(
+        "Torch did not find available GPUs.\n"
+        "Assuming cross-compilation on all the supported architecture (by the torch's CUDA).\n"
+        "Set TORCH_CUDA_ARCH_LIST for specific architectures."
+    )
+    if os.getenv("TORCH_CUDA_ARCH_LIST") is None:
+        _, major, minor = get_cuda_bare_metal_version(CUDA_HOME)
+        major, minor = int(major), int(minor)
+        if major == 11:
+            if minor == 0:
+                os.environ["TORCH_CUDA_ARCH_LIST"] = "6.0;6.1;6.2;7.0;7.5;8.0"
+            elif minor < 8:
+                os.environ["TORCH_CUDA_ARCH_LIST"] = "6.0;6.1;6.2;7.0;7.5;8.0;8.6"
+            else:
+                os.environ["TORCH_CUDA_ARCH_LIST"] = "6.0;6.1;6.2;7.0;7.5;8.0;8.6;8.9"
+        elif major == 12:
+            if minor <= 6:
+                os.environ["TORCH_CUDA_ARCH_LIST"] = "6.0;6.1;6.2;7.0;7.5;8.0;8.6;9.0"
+            elif minor == 8:
+                os.environ["TORCH_CUDA_ARCH_LIST"] = "6.0;6.1;6.2;7.0;7.5;8.0;8.6;9.0;12.0"
+            else:
+                os.environ["TORCH_CUDA_ARCH_LIST"] = "6.0;6.1;6.2;7.0;7.5;8.0;8.6;9.0;12.0;12.1"
+        elif major == 13:
+            os.environ["TORCH_CUDA_ARCH_LIST"] = "7.5;8.0;8.6;8.9;9.0;12.0;12.1"
+        else:
+            os.environ["TORCH_CUDA_ARCH_LIST"] = "6.0;6.1;6.2;7.0;7.5"
+        print(f'TORCH_CUDA_ARCH_LIST: {os.environ["TORCH_CUDA_ARCH_LIST"]}')
+elif not torch.cuda.is_available():
+    raise RuntimeError("CUDA is not available, to cross-compile Set TORCH_CUDA_ARCH_LIST for specific architectures,\n"
+                       "or NVDIFFRAST_CROSS_COMPILE_ALL=1 to cross-compile across all the supported architectures.")
 
 setuptools.setup(
     ext_modules=[
