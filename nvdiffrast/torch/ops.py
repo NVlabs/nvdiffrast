@@ -10,6 +10,7 @@ import numpy as np
 import torch
 import warnings
 import _nvdiffrast_c
+from collections.abc import Sequence
 
 #----------------------------------------------------------------------------
 # Log level.
@@ -297,7 +298,7 @@ def interpolate(attr, rast, tri, rast_db=None, diff_attrs=None):
 # Linear-mipmap-linear and linear-mipmap-nearest: Mipmaps enabled.
 class _texture_func_mip(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, filter_mode, tex, uv, uv_da, mip_level_bias, mip_wrapper, filter_mode_enum, boundary_mode_enum, *mip_stack):
+    def forward(ctx, filter_mode, tex, uv, uv_da, mip_level_bias, mip_wrapper, filter_mode_enum, boundary_mode_enum, border_values, *mip_stack):
         empty = torch.tensor([])
         if uv_da is None:
             uv_da = empty
@@ -305,44 +306,44 @@ class _texture_func_mip(torch.autograd.Function):
             mip_level_bias = empty
         if mip_wrapper is None:
             mip_wrapper = _nvdiffrast_c.TextureMipWrapper()
-        out = _nvdiffrast_c.texture_fwd_mip(tex, uv, uv_da, mip_level_bias, mip_wrapper, mip_stack, filter_mode_enum, boundary_mode_enum)
+        out = _nvdiffrast_c.texture_fwd_mip(tex, uv, uv_da, mip_level_bias, mip_wrapper, mip_stack, filter_mode_enum, boundary_mode_enum, border_values)
         ctx.save_for_backward(tex, uv, uv_da, mip_level_bias, *mip_stack)
-        ctx.saved_misc = filter_mode, mip_wrapper, filter_mode_enum, boundary_mode_enum
+        ctx.saved_misc = filter_mode, mip_wrapper, filter_mode_enum, boundary_mode_enum, border_values
         return out
 
     @staticmethod
     def backward(ctx, dy):
         tex, uv, uv_da, mip_level_bias, *mip_stack = ctx.saved_tensors
-        filter_mode, mip_wrapper, filter_mode_enum, boundary_mode_enum = ctx.saved_misc
+        filter_mode, mip_wrapper, filter_mode_enum, boundary_mode_enum, border_values = ctx.saved_misc
         if filter_mode == 'linear-mipmap-linear':
-            g_tex, g_uv, g_uv_da, g_mip_level_bias, g_mip_stack = _nvdiffrast_c.texture_grad_linear_mipmap_linear(tex, uv, dy, uv_da, mip_level_bias, mip_wrapper, mip_stack, filter_mode_enum, boundary_mode_enum)
-            return (None, g_tex, g_uv, g_uv_da, g_mip_level_bias, None, None, None) + tuple(g_mip_stack)
+            g_tex, g_uv, g_uv_da, g_mip_level_bias, g_mip_stack = _nvdiffrast_c.texture_grad_linear_mipmap_linear(tex, uv, dy, uv_da, mip_level_bias, mip_wrapper, mip_stack, filter_mode_enum, boundary_mode_enum, border_values)
+            return (None, g_tex, g_uv, g_uv_da, g_mip_level_bias, None, None, None, None) + tuple(g_mip_stack)
         else: # linear-mipmap-nearest
-            g_tex, g_uv, g_mip_stack = _nvdiffrast_c.texture_grad_linear_mipmap_nearest(tex, uv, dy, uv_da, mip_level_bias, mip_wrapper, mip_stack, filter_mode_enum, boundary_mode_enum)
-            return (None, g_tex, g_uv, None, None, None, None, None) + tuple(g_mip_stack)
+            g_tex, g_uv, g_mip_stack = _nvdiffrast_c.texture_grad_linear_mipmap_nearest(tex, uv, dy, uv_da, mip_level_bias, mip_wrapper, mip_stack, filter_mode_enum, boundary_mode_enum, border_values)
+            return (None, g_tex, g_uv, None, None, None, None, None, None) + tuple(g_mip_stack)
 
 # Linear and nearest: Mipmaps disabled.
 class _texture_func(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, filter_mode, tex, uv, filter_mode_enum, boundary_mode_enum):
-        out = _nvdiffrast_c.texture_fwd(tex, uv, filter_mode_enum, boundary_mode_enum)
+    def forward(ctx, filter_mode, tex, uv, filter_mode_enum, boundary_mode_enum, border_values):
+        out = _nvdiffrast_c.texture_fwd(tex, uv, filter_mode_enum, boundary_mode_enum, border_values)
         ctx.save_for_backward(tex, uv)
-        ctx.saved_misc = filter_mode, filter_mode_enum, boundary_mode_enum
+        ctx.saved_misc = filter_mode, filter_mode_enum, boundary_mode_enum, border_values
         return out
 
     @staticmethod
     def backward(ctx, dy):
         tex, uv = ctx.saved_tensors
-        filter_mode, filter_mode_enum, boundary_mode_enum = ctx.saved_misc
+        filter_mode, filter_mode_enum, boundary_mode_enum, border_values = ctx.saved_misc
         if filter_mode == 'linear':
-            g_tex, g_uv = _nvdiffrast_c.texture_grad_linear(tex, uv, dy, filter_mode_enum, boundary_mode_enum)
-            return None, g_tex, g_uv, None, None
+            g_tex, g_uv = _nvdiffrast_c.texture_grad_linear(tex, uv, dy, filter_mode_enum, boundary_mode_enum, border_values)
+            return None, g_tex, g_uv, None, None, None
         else: # nearest
-            g_tex = _nvdiffrast_c.texture_grad_nearest(tex, uv, dy, filter_mode_enum, boundary_mode_enum)
-            return None, g_tex, None, None, None
+            g_tex = _nvdiffrast_c.texture_grad_nearest(tex, uv, dy, filter_mode_enum, boundary_mode_enum, border_values)
+            return None, g_tex, None, None, None, None
 
 # Op wrapper.
-def texture(tex, uv, uv_da=None, mip_level_bias=None, mip=None, filter_mode='auto', boundary_mode='wrap', max_mip_level=None):
+def texture(tex, uv, uv_da=None, mip_level_bias=None, mip=None, filter_mode='auto', boundary_mode='wrap', max_mip_level=None, border_values = []):
     """Perform texture sampling.
 
     All input tensors must be contiguous and reside in GPU memory. The output tensor
@@ -377,13 +378,16 @@ def texture(tex, uv, uv_da=None, mip_level_bias=None, mip=None, filter_mode='aut
                      'linear-mipmap-linear' when at least one of them is specified, these being
                      the highest-quality modes possible depending on the availability of the
                      image-space derivatives of the texture coordinates or direct mip level information.
-        boundary_mode: Valid values are 'wrap', 'clamp', 'zero', and 'cube'. If `tex` defines a
+        boundary_mode: Valid values are 'wrap', 'clamp', 'zero', 'cube', and 'values'. If `tex` defines a
                        cube map, this must be set to 'cube'. The default mode 'wrap' takes fractional
                        part of texture coordinates. Mode 'clamp' clamps texture coordinates to the
                        centers of the boundary texels. Mode 'zero' virtually extends the texture with
-                       all-zero values in all directions.
+                       all-zero values in all directions. Mode 'values' virtually extends the texture
+                       with the per-channel `border_values` in all directions (`tex_channels` must be <= 16).
         max_mip_level: If specified, limits the number of mipmaps constructed and used in mipmap-based
                        filter modes.
+        border_values: A single value or a list of per-channel border values to be used when `boundary_mode` 
+                       is `values`. The length of the list must match `tex_channels`.
 
     Returns:
         A tensor containing the results of the texture sampling with shape
@@ -416,8 +420,12 @@ def texture(tex, uv, uv_da=None, mip_level_bias=None, mip=None, filter_mode='aut
     filter_mode_enum = filter_mode_dict[filter_mode]
 
     # Convert boundary mode to internal enumeration.
-    boundary_mode_dict = {'cube': 0, 'wrap': 1, 'clamp': 2, 'zero': 3}
+    boundary_mode_dict = {'cube': 0, 'wrap': 1, 'clamp': 2, 'zero': 3, 'values': 4}
     boundary_mode_enum = boundary_mode_dict[boundary_mode]
+
+    # If border_values is a single value, wrap it in a list matching the number of channels
+    if boundary_mode == 'values' and not isinstance(border_values, Sequence):
+        border_values = [border_values] * tex.shape[-1]
 
     # Construct a mipmap if necessary.
     if 'mipmap' in filter_mode:
@@ -434,9 +442,9 @@ def texture(tex, uv, uv_da=None, mip_level_bias=None, mip=None, filter_mode='aut
 
     # Choose stub.
     if filter_mode == 'linear-mipmap-linear' or filter_mode == 'linear-mipmap-nearest':
-        return _texture_func_mip.apply(filter_mode, tex, uv, uv_da, mip_level_bias, mip_wrapper, filter_mode_enum, boundary_mode_enum, *mip_stack)
+        return _texture_func_mip.apply(filter_mode, tex, uv, uv_da, mip_level_bias, mip_wrapper, filter_mode_enum, boundary_mode_enum, border_values, *mip_stack)
     else:
-        return _texture_func.apply(filter_mode, tex, uv, filter_mode_enum, boundary_mode_enum)
+        return _texture_func.apply(filter_mode, tex, uv, filter_mode_enum, boundary_mode_enum, border_values)
 
 # Mipmap precalculation for cases where the texture stays constant.
 def texture_construct_mip(tex, max_mip_level=None, cube_mode=False):

@@ -171,7 +171,7 @@ TextureMipWrapper texture_construct_mip(torch::Tensor tex, int max_mip_level, bo
 //------------------------------------------------------------------------
 // Forward op.
 
-torch::Tensor texture_fwd_mip(torch::Tensor tex, torch::Tensor uv, torch::Tensor uv_da, torch::Tensor mip_level_bias, TextureMipWrapper mip_wrapper, std::vector<torch::Tensor> mip_stack, int filter_mode, int boundary_mode)
+torch::Tensor texture_fwd_mip(torch::Tensor tex, torch::Tensor uv, torch::Tensor uv_da, torch::Tensor mip_level_bias, TextureMipWrapper mip_wrapper, std::vector<torch::Tensor> mip_stack, int filter_mode, int boundary_mode, std::vector<float> border_values)
 {
     const at::cuda::OptionalCUDAGuard device_guard(device_of(tex));
     cudaStream_t stream = at::cuda::getCurrentCUDAStream();
@@ -266,6 +266,16 @@ torch::Tensor texture_fwd_mip(torch::Tensor tex, torch::Tensor uv, torch::Tensor
     p.uv = uv.data_ptr<float>();
     p.uvDA = (p.enableMip && has_uv_da) ? uv_da.data_ptr<float>() : NULL;
     p.mipLevelBias = (p.enableMip && has_mip_level_bias) ? mip_level_bias.data_ptr<float>() : NULL;
+
+    // Set border values (if provided)
+    if (p.boundaryMode == TEX_BOUNDARY_MODE_VALUES)
+    {
+        NVDR_CHECK(p.channels <= TEX_MAX_BORDER_VALUES, "boundary_mode 'values' can only be used for up to 16 channels");
+        NVDR_CHECK(p.channels == border_values.size(), "number of border values must be equal to the number of channels");
+
+        for (int i = 0; i < p.channels; ++i)
+            p.borderValues[i] = border_values[i];
+    }
 
     // Allocate output tensor.
     torch::TensorOptions opts = torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCUDA);
@@ -408,17 +418,17 @@ torch::Tensor texture_fwd_mip(torch::Tensor tex, torch::Tensor uv, torch::Tensor
 }
 
 // Version without mipmaps.
-torch::Tensor texture_fwd(torch::Tensor tex, torch::Tensor uv, int filter_mode, int boundary_mode)
+torch::Tensor texture_fwd(torch::Tensor tex, torch::Tensor uv, int filter_mode, int boundary_mode, std::vector<float> border_values)
 {
     torch::Tensor empty_tensor;
     std::vector<torch::Tensor> empty_vector;
-    return texture_fwd_mip(tex, uv, empty_tensor, empty_tensor, TextureMipWrapper(), empty_vector, filter_mode, boundary_mode);
+    return texture_fwd_mip(tex, uv, empty_tensor, empty_tensor, TextureMipWrapper(), empty_vector, filter_mode, boundary_mode, border_values);
 }
 
 //------------------------------------------------------------------------
 // Gradient op.
 
-std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, std::vector<torch::Tensor> > texture_grad_linear_mipmap_linear(torch::Tensor tex, torch::Tensor uv, torch::Tensor dy, torch::Tensor uv_da, torch::Tensor mip_level_bias, TextureMipWrapper mip_wrapper, std::vector<torch::Tensor> mip_stack, int filter_mode, int boundary_mode)
+std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, std::vector<torch::Tensor> > texture_grad_linear_mipmap_linear(torch::Tensor tex, torch::Tensor uv, torch::Tensor dy, torch::Tensor uv_da, torch::Tensor mip_level_bias, TextureMipWrapper mip_wrapper, std::vector<torch::Tensor> mip_stack, int filter_mode, int boundary_mode, std::vector<float> border_values)
 {
     const at::cuda::OptionalCUDAGuard device_guard(device_of(tex));
     cudaStream_t stream = at::cuda::getCurrentCUDAStream();
@@ -518,6 +528,17 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, std::vect
     p.dy = dy_.data_ptr<float>();
     p.uvDA = (p.enableMip && has_uv_da) ? uv_da.data_ptr<float>() : NULL;
     p.mipLevelBias = (p.enableMip && has_mip_level_bias) ? mip_level_bias.data_ptr<float>() : NULL;
+
+    // Set border values (if provided)
+    if (p.boundaryMode == TEX_BOUNDARY_MODE_VALUES)
+    {
+        NVDR_CHECK(p.channels <= TEX_MAX_BORDER_VALUES, "boundary_mode 'values' can only be used for up to 16 channels");
+        NVDR_CHECK(p.channels == border_values.size(), "number of border values must be equal to the number of channels");
+
+        for (int i = 0; i < p.channels; ++i)
+            p.borderValues[i] = border_values[i];
+    }
+
 
     // Allocate output tensor for tex gradient.
     torch::Tensor grad_tex = torch::zeros_like(tex);
@@ -691,27 +712,27 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, std::vect
 }
 
 // Version for nearest filter mode.
-torch::Tensor texture_grad_nearest(torch::Tensor tex, torch::Tensor uv, torch::Tensor dy, int filter_mode, int boundary_mode)
+torch::Tensor texture_grad_nearest(torch::Tensor tex, torch::Tensor uv, torch::Tensor dy, int filter_mode, int boundary_mode, std::vector<float> border_values)
 {
     torch::Tensor empty_tensor;
     std::vector<torch::Tensor> empty_vector;
-    std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, std::vector<torch::Tensor> > result = texture_grad_linear_mipmap_linear(tex, uv, dy, empty_tensor, empty_tensor, TextureMipWrapper(), empty_vector, filter_mode, boundary_mode);
+    std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, std::vector<torch::Tensor> > result = texture_grad_linear_mipmap_linear(tex, uv, dy, empty_tensor, empty_tensor, TextureMipWrapper(), empty_vector, filter_mode, boundary_mode, border_values);
     return std::get<0>(result);
 }
 
 // Version for linear filter mode.
-std::tuple<torch::Tensor, torch::Tensor> texture_grad_linear(torch::Tensor tex, torch::Tensor uv, torch::Tensor dy, int filter_mode, int boundary_mode)
+std::tuple<torch::Tensor, torch::Tensor> texture_grad_linear(torch::Tensor tex, torch::Tensor uv, torch::Tensor dy, int filter_mode, int boundary_mode, std::vector<float> border_values)
 {
     torch::Tensor empty_tensor;
     std::vector<torch::Tensor> empty_vector;
-    std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, std::vector<torch::Tensor> > result = texture_grad_linear_mipmap_linear(tex, uv, dy, empty_tensor, empty_tensor, TextureMipWrapper(), empty_vector, filter_mode, boundary_mode);
+    std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, std::vector<torch::Tensor> > result = texture_grad_linear_mipmap_linear(tex, uv, dy, empty_tensor, empty_tensor, TextureMipWrapper(), empty_vector, filter_mode, boundary_mode, border_values);
     return std::tuple<torch::Tensor, torch::Tensor>(std::get<0>(result), std::get<1>(result));
 }
 
 // Version for linear-mipmap-nearest mode.
-std::tuple<torch::Tensor, torch::Tensor, std::vector<torch::Tensor> > texture_grad_linear_mipmap_nearest(torch::Tensor tex, torch::Tensor uv, torch::Tensor dy, torch::Tensor uv_da, torch::Tensor mip_level_bias, TextureMipWrapper mip_wrapper, std::vector<torch::Tensor> mip_stack, int filter_mode, int boundary_mode)
+std::tuple<torch::Tensor, torch::Tensor, std::vector<torch::Tensor> > texture_grad_linear_mipmap_nearest(torch::Tensor tex, torch::Tensor uv, torch::Tensor dy, torch::Tensor uv_da, torch::Tensor mip_level_bias, TextureMipWrapper mip_wrapper, std::vector<torch::Tensor> mip_stack, int filter_mode, int boundary_mode, std::vector<float> border_values)
 {
-    std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, std::vector<torch::Tensor> > result = texture_grad_linear_mipmap_linear(tex, uv, dy, uv_da, mip_level_bias, mip_wrapper, mip_stack, filter_mode, boundary_mode);
+    std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, std::vector<torch::Tensor> > result = texture_grad_linear_mipmap_linear(tex, uv, dy, uv_da, mip_level_bias, mip_wrapper, mip_stack, filter_mode, boundary_mode, border_values);
     return std::tuple<torch::Tensor, torch::Tensor, std::vector<torch::Tensor> >(std::get<0>(result), std::get<1>(result), std::get<4>(result));
 }
 
