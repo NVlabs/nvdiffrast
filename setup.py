@@ -8,7 +8,7 @@
 
 import setuptools
 import os
-
+import torch
 # Print an error message if there's no PyTorch installed.
 try:
     from torch.utils.cpp_extension import BuildExtension, CUDAExtension
